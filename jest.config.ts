@@ -1,23 +1,6 @@
 /**
- * @copyright Copyright (c) 2020 Marco Ambrosini <marcoambrosini@pm.me>
- *
- * @author Marco Ambrosini <marcoambrosini@pm.me>
- *
- * @license GNU AGPL version 3 or any later version
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
- *
+ * SPDX-FileCopyrightText: 2020 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 import type { Config } from 'jest'
 
@@ -26,6 +9,7 @@ const ignorePatterns = [
 	'@buttercup/fetch',
 	'@juliushaertl',
 	'@mdi/svg',
+	'@nextcloud/files',
 	'@nextcloud/upload',
 	'@nextcloud/vue',
 	'ansi-regex',
@@ -33,6 +17,7 @@ const ignorePatterns = [
 	'char-regex',
 	'hot-patcher',
 	'is-svg',
+	'layerr',
 	'mime',
 	'p-cancelable',
 	'p-limit',
@@ -43,6 +28,7 @@ const ignorePatterns = [
 	'strip-ansi',
 	'tributejs',
 	'unist-.+',
+	'url-join',
 	'vue-material-design-icons',
 	'webdav',
 	'yocto-queue',
@@ -66,7 +52,7 @@ const config: Config = {
 
 	transform: {
 		// process `*.js` files with `babel-jest`
-		'^.+\\.js$': 'babel-jest',
+		'^.+\\.c?js$': 'babel-jest',
 		'^.+\\.vue$': '@vue/vue2-jest',
 		'^.+\\.ts$': ['ts-jest', {
 			// @see https://github.com/kulshekhar/ts-jest/issues/4081
@@ -82,6 +68,7 @@ const config: Config = {
 		'^.+\\.svg(\\?raw)?$': '<rootDir>/__mocks__/svg.js',
 		'\\.s?css$': '<rootDir>/__mocks__/css.js',
 	},
+
 	modulePathIgnorePatterns: [
 		'<rootDir>/apps2/',
 		'<rootDir>/apps-extra/',

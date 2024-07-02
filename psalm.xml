@@ -1,4 +1,8 @@
 <?xml version="1.0"?>
+<!--
+ - SPDX-FileCopyrightText: 2020 Nextcloud GmbH and Nextcloud contributors
+ - SPDX-License-Identifier: AGPL-3.0-or-later
+-->
 <psalm
 	errorLevel="4"
 	resolveFromConfigFile="true"
@@ -41,6 +45,7 @@
 		<directory name="apps/user_ldap"/>
 		<directory name="apps/user_status"/>
 		<directory name="apps/weather_status"/>
+		<directory name="apps/webhook_listeners"/>
 		<directory name="apps/workflowengine"/>
 		<directory name="core"/>
 		<directory name="lib"/>

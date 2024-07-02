@@ -1,13 +1,19 @@
 /* eslint-disable camelcase */
+/**
+ * SPDX-FileCopyrightText: 2019 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
 const { VueLoaderPlugin } = require('vue-loader')
+const { readFileSync } = require('fs')
 const path = require('path')
+
 const BabelLoaderExcludeNodeModulesExcept = require('babel-loader-exclude-node-modules-except')
 const webpack = require('webpack')
 const NodePolyfillPlugin = require('node-polyfill-webpack-plugin')
 const WorkboxPlugin = require('workbox-webpack-plugin')
+const WebpackSPDXPlugin = require('./build/WebpackSPDXPlugin.js')
 
 const modules = require('./webpack.modules.js')
-const { readFileSync } = require('fs')
 
 const appVersion = readFileSync('./version.php').toString().match(/OC_VersionString[^']+'([^']+)/)?.[1] ?? 'unknown'
 
@@ -143,6 +149,23 @@ module.exports = {
 	},
 
 	optimization: {
+		minimizer: [{
+			apply: (compiler) => {
+				// Lazy load the Terser plugin
+				const TerserPlugin = require('terser-webpack-plugin')
+				new TerserPlugin({
+					extractComments: false,
+					terserOptions: {
+						format: {
+							comments: false,
+						},
+						compress: {
+							passes: 2,
+						},
+					},
+			  }).apply(compiler)
+			},
+		}],
 		splitChunks: {
 			automaticNameDelimiter: '-',
 			minChunks: 3, // minimum number of chunks that must share the module
@@ -214,6 +237,16 @@ module.exports = {
 		new webpack.IgnorePlugin({
 			resourceRegExp: /^\.\/locale$/,
 			contextRegExp: /moment\/min$/,
+		}),
+
+		// Generate reuse license files
+		new WebpackSPDXPlugin({
+			override: {
+				select2: 'MIT',
+				'@nextcloud/axios': 'GPL-3.0-or-later',
+				'@nextcloud/vue': 'AGPL-3.0-or-later',
+				'nextcloud-vue-collections': 'AGPL-3.0-or-later',
+			}
 		}),
 	],
 	externals: {

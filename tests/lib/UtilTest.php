@@ -1,9 +1,8 @@
 <?php
 /**
- * Copyright (c) 2012 Lukas Reschke <lukas@statuscode.ch>
- * This file is licensed under the Affero General Public License version 3 or
- * later.
- * See the COPYING-README file.
+ * SPDX-FileCopyrightText: 2016-2024 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-FileCopyrightText: 2016 ownCloud, Inc.
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
 namespace Test;
@@ -91,9 +90,25 @@ class UtilTest extends \Test\TestCase {
 		$this->assertEquals($expected, \OC_Util::fileInfoLoaded());
 	}
 
+	/**
+	 * Host is "localhost" this is a valid for emails,
+	 * but not for default strict email verification that requires a top level domain.
+	 * So we check that with strict email verification we fallback to the default
+	 */
+	public function testGetDefaultEmailAddressStrict() {
+		$email = \OCP\Util::getDefaultEmailAddress("no-reply");
+		$this->assertEquals('no-reply@localhost.localdomain', $email);
+	}
+
+	/**
+	 * If no strict email check is enabled "localhost" should validate as a valid email domain
+	 */
 	public function testGetDefaultEmailAddress() {
+		$config = \OC::$server->getConfig();
+		$config->setAppValue('core', 'enforce_strict_email_check', 'no');
 		$email = \OCP\Util::getDefaultEmailAddress("no-reply");
 		$this->assertEquals('no-reply@localhost', $email);
+		$config->deleteAppValue('core', 'enforce_strict_email_check');
 	}
 
 	public function testGetDefaultEmailAddressFromConfig() {

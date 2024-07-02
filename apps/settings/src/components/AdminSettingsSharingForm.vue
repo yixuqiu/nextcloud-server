@@ -1,23 +1,6 @@
 <!--
-	- @copyright 2023 Ferdinand Thiessen <opensource@fthiessen.de>
-	-
-	- @author Ferdinand Thiessen <opensource@fthiessen.de>
-	-
-	- @license AGPL-3.0-or-later
-	-
-	- This program is free software: you can redistribute it and/or modify
-	- it under the terms of the GNU Affero General Public License as
-	- published by the Free Software Foundation, either version 3 of the
-	- License, or (at your option) any later version.
-	-
-	- This program is distributed in the hope that it will be useful,
-	- but WITHOUT ANY WARRANTY; without even the implied warranty of
-	- MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-	- GNU Affero General Public License for more details.
-	-
-	- You should have received a copy of the GNU Affero General Public License
-	- along with this program. If not, see <http://www.gnu.org/licenses/>.
-	-
+  - SPDX-FileCopyrightText: 2023 Nextcloud GmbH and Nextcloud contributors
+  - SPDX-License-Identifier: AGPL-3.0-or-later
 -->
 <template>
 	<form class="sharing">
@@ -160,17 +143,17 @@
 			<NcCheckboxRadioSwitch type="switch"
 				aria-controls="settings-sharing-privacy-user-enumeration"
 				:checked.sync="settings.allowShareDialogUserEnumeration">
-				{{ t('settings', 'Allow username autocompletion in share dialog and allow access to the system address book') }}
+				{{ t('settings', 'Allow account name autocompletion in share dialog and allow access to the system address book') }}
 			</NcCheckboxRadioSwitch>
 			<fieldset v-show="settings.allowShareDialogUserEnumeration" id="settings-sharing-privacy-user-enumeration" class="sharing__sub-section">
 				<em>
 					{{ t('settings', 'If autocompletion "same group" and "phone number integration" are enabled a match in either is enough to show the user.') }}
 				</em>
 				<NcCheckboxRadioSwitch :checked.sync="settings.restrictUserEnumerationToGroup">
-					{{ t('settings', 'Allow username autocompletion to users within the same groups and limit system address books to users in the same groups') }}
+					{{ t('settings', 'Allow account name autocompletion to users within the same groups and limit system address books to users in the same groups') }}
 				</NcCheckboxRadioSwitch>
 				<NcCheckboxRadioSwitch :checked.sync="settings.restrictUserEnumerationToPhone">
-					{{ t('settings', 'Allow username autocompletion to users based on phone number integration') }}
+					{{ t('settings', 'Allow account name autocompletion to users based on phone number integration') }}
 				</NcCheckboxRadioSwitch>
 			</fieldset>
 
@@ -212,10 +195,11 @@ import {
 import { showError, showSuccess } from '@nextcloud/dialogs'
 import { translate as t } from '@nextcloud/l10n'
 import { loadState } from '@nextcloud/initial-state'
+import { snakeCase } from 'lodash'
 import { defineComponent } from 'vue'
+import debounce from 'debounce'
 
 import SelectSharingPermissions from './SelectSharingPermissions.vue'
-import { snakeCase, debounce } from 'lodash'
 
 interface IShareSettings {
 	enabled: boolean

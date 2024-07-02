@@ -1,3 +1,7 @@
+/**
+ * SPDX-FileCopyrightText: 2022 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
 import {
 	applyChangesToNextcloud,
 	configureNextcloud,
@@ -90,7 +94,10 @@ export default defineConfig({
 			config.baseUrl = `http://${ip}/index.php`
 			await waitOnNextcloud(ip)
 			await configureNextcloud()
-			await applyChangesToNextcloud()
+
+			if (!process.env.CI) {
+				await applyChangesToNextcloud()
+			}
 
 			// IMPORTANT: return the config otherwise cypress-split will not work
 			return config

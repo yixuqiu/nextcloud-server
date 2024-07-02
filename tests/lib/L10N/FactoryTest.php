@@ -3,10 +3,9 @@
 declare(strict_types=1);
 
 /**
- * Copyright (c) 2016 Joas Schilling <nickvergessen@owncloud.com>
- * This file is licensed under the Affero General Public License version 3 or
- * later.
- * See the COPYING-README file.
+ * SPDX-FileCopyrightText: 2016-2024 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-FileCopyrightText: 2016 ownCloud, Inc.
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
 namespace Test\L10N;
@@ -699,6 +698,53 @@ class FactoryTest extends TestCase {
 
 		$result = $this->invokePrivate($factory, 'respectDefaultLanguage', ['app', $lang]);
 		self::assertSame($expected, $result);
+	}
+
+	public static function dataTestReduceToLanguages(): array {
+		return [
+			['en', ['en', 'de', 'fr', 'it', 'es'], ['en', 'fr', 'de'], ['en', 'fr', 'de']],
+			['en', ['en', 'de', 'fr', 'it', 'es'], ['en', 'de'], ['en', 'de']],
+			['en', ['en', 'de', 'fr', 'it', 'es'], [], ['de', 'en', 'es', 'fr', 'it']],
+		];
+	}
+
+	/**
+	 * test
+	 * - if available languages set can be reduced by configuration
+	 * - if available languages set is not reduced to an empty set if
+	 *   the reduce config is an empty set
+	 *
+	 * @dataProvider dataTestReduceToLanguages
+	 *
+	 * @param string $lang
+	 * @param array $availableLanguages
+	 * @param array $reducedLanguageSet
+	 * @param array $expected
+	 */
+	public function testReduceLanguagesByConfiguration(string $lang, array $availableLanguages, array $reducedLanguageSet, array $expected): void {
+		$factory = $this->getFactory(['findAvailableLanguages', 'languageExists']);
+		$factory->expects(self::any())
+			->method('languageExists')->willReturn(true);
+		$factory->expects(self::any())
+			->method('findAvailableLanguages')
+			->willReturnCallback(function ($app) use ($availableLanguages) {
+				return $availableLanguages;
+			});
+
+		$this->config
+			->method('getSystemValue')
+			->willReturnMap([
+				['force_language', false, false],
+				['default_language', false, $lang],
+				['reduce_to_languages', [], $reducedLanguageSet]
+			]);
+
+		$result = $this->invokePrivate($factory, 'getLanguages');
+		$commonLanguagesCodes = array_map(function ($lang) {
+			return $lang['code'];
+		}, $result['commonLanguages']);
+
+		self::assertEqualsCanonicalizing($expected, $commonLanguagesCodes);
 	}
 
 	public function languageIteratorRequestProvider():array {

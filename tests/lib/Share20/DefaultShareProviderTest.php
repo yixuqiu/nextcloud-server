@@ -1,23 +1,8 @@
 <?php
 /**
- * @author Roeland Jago Douma <rullzer@owncloud.com>
- *
- * @copyright Copyright (c) 2015, ownCloud, Inc.
- * @copyright Copyright (c) 2016, Roeland Jago Douma <roeland@famdouma.nl>
- * @license AGPL-3.0
- *
- * This code is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License, version 3,
- * as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program.  If not, see <http://www.gnu.org/licenses/>
- *
+ * SPDX-FileCopyrightText: 2016-2024 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-FileCopyrightText: 2016 ownCloud, Inc.
+ * SPDX-License-Identifier: AGPL-3.0-only
  */
 
 namespace Test\Share20;
@@ -53,31 +38,31 @@ class DefaultShareProviderTest extends \Test\TestCase {
 	/** @var IDBConnection */
 	protected $dbConn;
 
-	/** @var IUserManager | \PHPUnit\Framework\MockObject\MockObject */
+	/** @var IUserManager | MockObject */
 	protected $userManager;
 
-	/** @var IGroupManager | \PHPUnit\Framework\MockObject\MockObject */
+	/** @var IGroupManager | MockObject */
 	protected $groupManager;
 
-	/** @var IRootFolder | \PHPUnit\Framework\MockObject\MockObject */
+	/** @var IRootFolder | MockObject */
 	protected $rootFolder;
 
 	/** @var DefaultShareProvider */
 	protected $provider;
 
-	/** @var \PHPUnit\Framework\MockObject\MockObject|IMailer */
+	/** @var MockObject|IMailer */
 	protected $mailer;
 
 	/** @var IFactory|MockObject */
 	protected $l10nFactory;
 
-	/** @var \PHPUnit\Framework\MockObject\MockObject|IL10N */
+	/** @var MockObject|IL10N */
 	protected $l10n;
 
-	/** @var \PHPUnit\Framework\MockObject\MockObject|Defaults */
+	/** @var MockObject|Defaults */
 	protected $defaults;
 
-	/** @var \PHPUnit\Framework\MockObject\MockObject|IURLGenerator */
+	/** @var MockObject|IURLGenerator */
 	protected $urlGenerator;
 
 	/** @var ITimeFactory|MockObject */
@@ -1050,7 +1035,9 @@ class DefaultShareProviderTest extends \Test\TestCase {
 			['shareOwner', $owner],
 			['sharedBy', $initiator],
 		]);
-		$this->groupManager->method('getUserGroupIds')->with($user)->willReturn($groups);
+		$this->groupManager
+			->method('getUserGroupIds')
+			->willReturnCallback(fn (IUser $user) => ($user->getUID() === 'sharedWith' ? $groups : []));
 
 		$file = $this->createMock(File::class);
 		$this->rootFolder->method('getUserFolder')->with('shareOwner')->willReturnSelf();
@@ -1138,7 +1125,9 @@ class DefaultShareProviderTest extends \Test\TestCase {
 			['shareOwner', $owner],
 			['sharedBy', $initiator],
 		]);
-		$this->groupManager->method('getUserGroupIds')->with($user)->willReturn($groups);
+		$this->groupManager
+			->method('getUserGroupIds')
+			->willReturnCallback(fn (IUser $user) => ($user->getUID() === 'user' ? $groups : []));
 
 		$file = $this->createMock(File::class);
 		$this->rootFolder->method('getUserFolder')->with('shareOwner')->willReturnSelf();
@@ -1221,7 +1210,9 @@ class DefaultShareProviderTest extends \Test\TestCase {
 			['user1', $user1],
 		]);
 
-		$this->groupManager->method('getUserGroupIds')->with($user0)->willReturn(['group0']);
+		$this->groupManager
+			->method('getUserGroupIds')
+			->willReturnCallback(fn (IUser $user) => ($user->getUID() === 'user0' ? ['group0'] : []));
 
 		$node = $this->createMock(Folder::class);
 		$node->method('getId')->willReturn($fileId2);
@@ -1298,7 +1289,9 @@ class DefaultShareProviderTest extends \Test\TestCase {
 			['shareOwner', $owner],
 			['sharedBy', $initiator],
 		]);
-		$this->groupManager->method('getUserGroupIds')->with($user)->willReturn($groups);
+		$this->groupManager
+			->method('getUserGroupIds')
+			->willReturnCallback(fn (IUser $user) => ($user->getUID() === 'sharedWith' ? $groups : []));
 
 		$share = $this->provider->getSharedWith('sharedWith', $shareType, null, 1, 0);
 		$this->assertCount(0, $share);

@@ -1,23 +1,6 @@
 /**
- * @copyright Copyright (c) 2021 John Molakvoæ <skjnldsv@protonmail.com>
- *
- * @author John Molakvoæ <skjnldsv@protonmail.com>
- *
- * @license AGPL-3.0-or-later
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
- *
+ * SPDX-FileCopyrightText: 2021 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 const path = require('path')
 
@@ -28,6 +11,7 @@ module.exports = {
 		init: path.join(__dirname, 'apps/comments/src', 'init.ts'),
 	},
 	core: {
+		'ajax-cron': path.join(__dirname, 'core/src', 'ajax-cron.ts'),
 		files_client: path.join(__dirname, 'core/src', 'files/client.js'),
 		files_fileinfo: path.join(__dirname, 'core/src', 'files/fileinfo.js'),
 		install: path.join(__dirname, 'core/src', 'install.js'),
@@ -72,7 +56,7 @@ module.exports = {
 		'personal-settings': path.join(__dirname, 'apps/files_sharing/src', 'personal-settings.js'),
 	},
 	files_trashbin: {
-		main: path.join(__dirname, 'apps/files_trashbin/src', 'main.ts'),
+		init: path.join(__dirname, 'apps/files_trashbin/src', 'files-init.ts'),
 	},
 	files_versions: {
 		files_versions: path.join(__dirname, 'apps/files_versions/src', 'files_versions_tab.js'),
@@ -81,6 +65,7 @@ module.exports = {
 		oauth2: path.join(__dirname, 'apps/oauth2/src', 'main.js'),
 	},
 	federatedfilesharing: {
+		external: path.join(__dirname, 'apps/federatedfilesharing/src', 'external.js'),
 		'vue-settings-admin': path.join(__dirname, 'apps/federatedfilesharing/src', 'main-admin.js'),
 		'vue-settings-personal': path.join(__dirname, 'apps/federatedfilesharing/src', 'main-personal.js'),
 	},

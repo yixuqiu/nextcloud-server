@@ -1,5 +1,9 @@
 <?php
-
+/**
+ * SPDX-FileCopyrightText: 2016-2024 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-FileCopyrightText: 2016 ownCloud, Inc.
+ * SPDX-License-Identifier: AGPL-3.0-only
+ */
 namespace Test\Comments;
 
 use OC\Comments\Comment;
@@ -10,6 +14,7 @@ use OCP\Comments\IComment;
 use OCP\Comments\ICommentsEventHandler;
 use OCP\Comments\ICommentsManager;
 use OCP\Comments\NotFoundException;
+use OCP\EventDispatcher\IEventDispatcher;
 use OCP\Files\Folder;
 use OCP\Files\IRootFolder;
 use OCP\IConfig;
@@ -87,6 +92,7 @@ class ManagerTest extends TestCase {
 			new EmojiHelper($this->connection),
 			$this->createMock(IInitialStateService::class),
 			$this->rootFolder,
+			$this->createMock(IEventDispatcher::class),
 		);
 	}
 
@@ -754,6 +760,7 @@ class ManagerTest extends TestCase {
 			new EmojiHelper($this->connection),
 			$this->createMock(IInitialStateService::class),
 			$this->rootFolder,
+			$this->createMock(IEventDispatcher::class)
 		);
 
 		// just to make sure they are really set, with correct actor data
@@ -800,6 +807,7 @@ class ManagerTest extends TestCase {
 			new EmojiHelper($this->connection),
 			$this->createMock(IInitialStateService::class),
 			$this->rootFolder,
+			$this->createMock(IEventDispatcher::class)
 		);
 
 		$deleted = $manager->deleteCommentsExpiredAtObject('files');

@@ -1,23 +1,7 @@
 <!--
-  - @copyright 2019 Christoph Wurst <christoph@winzerhof-wurst.at>
-  -
-  - @author 2019 Christoph Wurst <christoph@winzerhof-wurst.at>
-  -
-  - @license GNU AGPL version 3 or any later version
-  -
-  - This program is free software: you can redistribute it and/or modify
-  - it under the terms of the GNU Affero General Public License as
-  - published by the Free Software Foundation, either version 3 of the
-  - License, or (at your option) any later version.
-  -
-  - This program is distributed in the hope that it will be useful,
-  - but WITHOUT ANY WARRANTY; without even the implied warranty of
-  - MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-  - GNU Affero General Public License for more details.
-  -
-  - You should have received a copy of the GNU Affero General Public License
-  - along with this program.  If not, see <http://www.gnu.org/licenses/>.
-  -->
+  - SPDX-FileCopyrightText: 2019 Nextcloud GmbH and Nextcloud contributors
+  - SPDX-License-Identifier: AGPL-3.0-or-later
+-->
 
 <template>
 	<form ref="loginForm"
@@ -117,7 +101,7 @@
 import { loadState } from '@nextcloud/initial-state'
 import { translate as t } from '@nextcloud/l10n'
 import { generateUrl, imagePath } from '@nextcloud/router'
-import { debounce } from 'debounce'
+import debounce from 'debounce'
 
 import NcPasswordField from '@nextcloud/vue/dist/Components/NcPasswordField.js'
 import NcTextField from '@nextcloud/vue/dist/Components/NcTextField.js'
@@ -254,9 +238,9 @@ export default {
 		},
 		loginText() {
 			if (this.emailEnabled) {
-				return t('core', 'Login with username or email')
+				return t('core', 'Account name or email')
 			}
-			return t('core', 'Login with username')
+			return t('core', 'Account name')
 		},
 	},
 
@@ -290,7 +274,13 @@ export default {
 		updateUsername() {
 			this.$emit('update:username', this.user)
 		},
-		submit() {
+		submit(event) {
+			if (this.loading) {
+				// Prevent the form from being submitted twice
+				event.preventDefault()
+				return
+			}
+
 			this.loading = true
 			this.$emit('submit')
 		},

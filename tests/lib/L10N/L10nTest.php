@@ -1,9 +1,8 @@
 <?php
 /**
- * Copyright (c) 2016 Joas Schilling <nickvergessen@owncloud.com>
- * This file is licensed under the Affero General Public License version 3 or
- * later.
- * See the COPYING-README file.
+ * SPDX-FileCopyrightText: 2016-2024 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-FileCopyrightText: 2016 ownCloud, Inc.
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
 namespace Test\L10N;
@@ -16,6 +15,7 @@ use OCP\ICacheFactory;
 use OCP\IConfig;
 use OCP\IRequest;
 use OCP\IUserSession;
+use OCP\L10N\IFactory;
 use Test\TestCase;
 
 /**
@@ -220,7 +220,7 @@ class L10nTest extends TestCase {
 	public function testFindLanguageFromLocale($locale, $language) {
 		$this->assertEquals(
 			$language,
-			\OC::$server->getL10NFactory()->findLanguageFromLocale('lib', $locale)
+			\OC::$server->get(IFactory::class)->findLanguageFromLocale('lib', $locale)
 		);
 	}
 
