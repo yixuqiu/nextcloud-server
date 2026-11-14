@@ -3,25 +3,8 @@
 declare(strict_types=1);
 
 /**
- * @copyright 2022 Christopher Ng <chrng8@gmail.com>
- *
- * @author Christopher Ng <chrng8@gmail.com>
- *
- * @license GNU AGPL version 3 or any later version
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
- *
+ * SPDX-FileCopyrightText: 2022 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
 namespace OCA\DAV\UserMigration;
@@ -54,29 +37,22 @@ class ContactsMigrator implements IMigrator, ISizeEstimationMigrator {
 
 	use TMigratorBasicVersionHandling;
 
-	private CardDavBackend $cardDavBackend;
-
-	private IL10N $l10n;
-
 	private SabreDavServer $sabreDavServer;
 
-	private const USERS_URI_ROOT = 'principals/users/';
+	private const string USERS_URI_ROOT = 'principals/users/';
 
-	private const FILENAME_EXT = 'vcf';
+	private const string FILENAME_EXT = 'vcf';
 
-	private const METADATA_EXT = 'json';
+	private const string METADATA_EXT = 'json';
 
-	private const MIGRATED_URI_PREFIX = 'migrated-';
+	private const string MIGRATED_URI_PREFIX = 'migrated-';
 
-	private const PATH_ROOT = Application::APP_ID . '/address_books/';
+	private const string PATH_ROOT = Application::APP_ID . '/address_books/';
 
 	public function __construct(
-		CardDavBackend $cardDavBackend,
-		IL10N $l10n
+		private CardDavBackend $cardDavBackend,
+		private IL10N $l10n,
 	) {
-		$this->cardDavBackend = $cardDavBackend;
-		$this->l10n = $l10n;
-
 		$root = new RootCollection();
 		$this->sabreDavServer = new SabreDavServer(new CachingTree($root));
 		$this->sabreDavServer->addPlugin(new CardDAVPlugin());
@@ -203,6 +179,7 @@ class ContactsMigrator implements IMigrator, ISizeEstimationMigrator {
 	/**
 	 * {@inheritDoc}
 	 */
+	#[\Override]
 	public function getEstimatedExportSize(IUser $user): int|float {
 		$addressBookExports = $this->getAddressBookExports($user, new NullOutput());
 		$addressBookCount = count($addressBookExports);
@@ -224,6 +201,7 @@ class ContactsMigrator implements IMigrator, ISizeEstimationMigrator {
 	/**
 	 * {@inheritDoc}
 	 */
+	#[\Override]
 	public function export(IUser $user, IExportDestination $exportDestination, OutputInterface $output): void {
 		$output->writeln('Exporting contacts into ' . ContactsMigrator::PATH_ROOT . '…');
 
@@ -268,7 +246,7 @@ class ContactsMigrator implements IMigrator, ISizeEstimationMigrator {
 				$vCard->serialize(),
 			);
 		} catch (Throwable $e) {
-			$output->writeln("Error creating contact \"" . ($vCard->FN ?? 'null') . "\" from \"$filename\", skipping…");
+			$output->writeln('Error creating contact "' . ($vCard->FN ?? 'null') . "\" from \"$filename\", skipping…");
 		}
 	}
 
@@ -334,6 +312,7 @@ class ContactsMigrator implements IMigrator, ISizeEstimationMigrator {
 	 *
 	 * @throws ContactsMigratorException
 	 */
+	#[\Override]
 	public function import(IUser $user, IImportSource $importSource, OutputInterface $output): void {
 		if ($importSource->getMigratorVersion($this->getId()) === null) {
 			$output->writeln('No version for ' . static::class . ', skipping import…');
@@ -401,6 +380,7 @@ class ContactsMigrator implements IMigrator, ISizeEstimationMigrator {
 	/**
 	 * {@inheritDoc}
 	 */
+	#[\Override]
 	public function getId(): string {
 		return 'contacts';
 	}
@@ -408,6 +388,7 @@ class ContactsMigrator implements IMigrator, ISizeEstimationMigrator {
 	/**
 	 * {@inheritDoc}
 	 */
+	#[\Override]
 	public function getDisplayName(): string {
 		return $this->l10n->t('Contacts');
 	}
@@ -415,6 +396,7 @@ class ContactsMigrator implements IMigrator, ISizeEstimationMigrator {
 	/**
 	 * {@inheritDoc}
 	 */
+	#[\Override]
 	public function getDescription(): string {
 		return $this->l10n->t('Contacts and groups');
 	}

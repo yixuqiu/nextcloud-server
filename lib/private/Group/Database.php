@@ -1,43 +1,22 @@
 <?php
+
 /**
- * @copyright Copyright (c) 2016, ownCloud, Inc.
- *
- * @author Christoph Wurst <christoph@winzerhof-wurst.at>
- * @author Joas Schilling <coding@schilljs.com>
- * @author Johannes Leuker <j.leuker@hosting.de>
- * @author John Molakvoæ <skjnldsv@protonmail.com>
- * @author Loki3000 <github@labcms.ru>
- * @author Morris Jobke <hey@morrisjobke.de>
- * @author Roeland Jago Douma <roeland@famdouma.nl>
- * @author tgrant <tom.grant760@gmail.com>
- * @author Tom Grant <TomG736@users.noreply.github.com>
- *
- * @license AGPL-3.0
- *
- * This code is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License, version 3,
- * as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program. If not, see <http://www.gnu.org/licenses/>
- *
+ * SPDX-FileCopyrightText: 2016-2024 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-FileCopyrightText: 2016 ownCloud, Inc.
+ * SPDX-License-Identifier: AGPL-3.0-only
  */
+
 namespace OC\Group;
 
-use Doctrine\DBAL\Exception\UniqueConstraintViolationException;
 use OC\User\LazyUser;
+use OCP\DB\Exception;
 use OCP\DB\QueryBuilder\IQueryBuilder;
 use OCP\Group\Backend\ABackend;
 use OCP\Group\Backend\IAddToGroupBackend;
 use OCP\Group\Backend\IBatchMethodsBackend;
 use OCP\Group\Backend\ICountDisabledInGroup;
 use OCP\Group\Backend\ICountUsersBackend;
-use OCP\Group\Backend\ICreateGroupBackend;
+use OCP\Group\Backend\ICreateNamedGroupBackend;
 use OCP\Group\Backend\IDeleteGroupBackend;
 use OCP\Group\Backend\IGetDisplayNameBackend;
 use OCP\Group\Backend\IGroupDetailsBackend;
@@ -47,6 +26,7 @@ use OCP\Group\Backend\ISearchableGroupBackend;
 use OCP\Group\Backend\ISetDisplayNameBackend;
 use OCP\IDBConnection;
 use OCP\IUserManager;
+use OCP\Server;
 
 /**
  * Class for group management in a SQL Database (e.g. MySQL, SQLite)
@@ -55,7 +35,7 @@ class Database extends ABackend implements
 	IAddToGroupBackend,
 	ICountDisabledInGroup,
 	ICountUsersBackend,
-	ICreateGroupBackend,
+	ICreateNamedGroupBackend,
 	IDeleteGroupBackend,
 	IGetDisplayNameBackend,
 	IGroupDetailsBackend,
@@ -66,15 +46,15 @@ class Database extends ABackend implements
 	INamedBackend {
 	/** @var array<string, array{gid: string, displayname: string}> */
 	private $groupCache = [];
-	private ?IDBConnection $dbConn;
 
 	/**
 	 * \OC\Group\Database constructor.
 	 *
 	 * @param IDBConnection|null $dbConn
 	 */
-	public function __construct(?IDBConnection $dbConn = null) {
-		$this->dbConn = $dbConn;
+	public function __construct(
+		private ?IDBConnection $dbConn = null,
+	) {
 	}
 
 	/**
@@ -82,39 +62,37 @@ class Database extends ABackend implements
 	 */
 	private function fixDI() {
 		if ($this->dbConn === null) {
-			$this->dbConn = \OC::$server->getDatabaseConnection();
+			$this->dbConn = Server::get(IDBConnection::class);
 		}
 	}
 
-	/**
-	 * Try to create a new group
-	 * @param string $gid The name of the group to create
-	 * @return bool
-	 *
-	 * Tries to create a new group. If the group name already exists, false will
-	 * be returned.
-	 */
-	public function createGroup(string $gid): bool {
+	#[\Override]
+	public function createGroup(string $name): ?string {
 		$this->fixDI();
 
+		$gid = $this->computeGid($name);
 		try {
 			// Add group
 			$builder = $this->dbConn->getQueryBuilder();
-			$result = $builder->insert('groups')
+			$builder->insert('groups')
 				->setValue('gid', $builder->createNamedParameter($gid))
-				->setValue('displayname', $builder->createNamedParameter($gid))
-				->execute();
-		} catch (UniqueConstraintViolationException $e) {
-			$result = 0;
+				->setValue('displayname', $builder->createNamedParameter($name))
+				->executeStatement();
+		} catch (Exception $e) {
+			if ($e->getReason() === Exception::REASON_UNIQUE_CONSTRAINT_VIOLATION) {
+				return null;
+			} else {
+				throw $e;
+			}
 		}
 
 		// Add to cache
 		$this->groupCache[$gid] = [
 			'gid' => $gid,
-			'displayname' => $gid
+			'displayname' => $name
 		];
 
-		return $result === 1;
+		return $gid;
 	}
 
 	/**
@@ -124,6 +102,7 @@ class Database extends ABackend implements
 	 *
 	 * Deletes a group and removes it from the group_user-table
 	 */
+	#[\Override]
 	public function deleteGroup(string $gid): bool {
 		$this->fixDI();
 
@@ -131,19 +110,19 @@ class Database extends ABackend implements
 		$qb = $this->dbConn->getQueryBuilder();
 		$qb->delete('groups')
 			->where($qb->expr()->eq('gid', $qb->createNamedParameter($gid)))
-			->execute();
+			->executeStatement();
 
 		// Delete the group-user relation
 		$qb = $this->dbConn->getQueryBuilder();
 		$qb->delete('group_user')
 			->where($qb->expr()->eq('gid', $qb->createNamedParameter($gid)))
-			->execute();
+			->executeStatement();
 
 		// Delete the group-groupadmin relation
 		$qb = $this->dbConn->getQueryBuilder();
 		$qb->delete('group_admin')
 			->where($qb->expr()->eq('gid', $qb->createNamedParameter($gid)))
-			->execute();
+			->executeStatement();
 
 		// Delete from cache
 		unset($this->groupCache[$gid]);
@@ -159,6 +138,7 @@ class Database extends ABackend implements
 	 *
 	 * Checks whether the user is member of a group or not.
 	 */
+	#[\Override]
 	public function inGroup($uid, $gid) {
 		$this->fixDI();
 
@@ -168,9 +148,9 @@ class Database extends ABackend implements
 			->from('group_user')
 			->where($qb->expr()->eq('gid', $qb->createNamedParameter($gid)))
 			->andWhere($qb->expr()->eq('uid', $qb->createNamedParameter($uid)))
-			->execute();
+			->executeQuery();
 
-		$result = $cursor->fetch();
+		$result = $cursor->fetchAssociative();
 		$cursor->closeCursor();
 
 		return $result ? true : false;
@@ -184,6 +164,7 @@ class Database extends ABackend implements
 	 *
 	 * Adds a user to a group.
 	 */
+	#[\Override]
 	public function addToGroup(string $uid, string $gid): bool {
 		$this->fixDI();
 
@@ -193,7 +174,7 @@ class Database extends ABackend implements
 			$qb->insert('group_user')
 				->setValue('uid', $qb->createNamedParameter($uid))
 				->setValue('gid', $qb->createNamedParameter($gid))
-				->execute();
+				->executeStatement();
 			return true;
 		} else {
 			return false;
@@ -208,6 +189,7 @@ class Database extends ABackend implements
 	 *
 	 * removes the user from a group.
 	 */
+	#[\Override]
 	public function removeFromGroup(string $uid, string $gid): bool {
 		$this->fixDI();
 
@@ -215,7 +197,7 @@ class Database extends ABackend implements
 		$qb->delete('group_user')
 			->where($qb->expr()->eq('uid', $qb->createNamedParameter($uid)))
 			->andWhere($qb->expr()->eq('gid', $qb->createNamedParameter($gid)))
-			->execute();
+			->executeStatement();
 
 		return true;
 	}
@@ -223,11 +205,12 @@ class Database extends ABackend implements
 	/**
 	 * Get all groups a user belongs to
 	 * @param string $uid Name of the user
-	 * @return array an array of group names
+	 * @return list<string> an array of group names
 	 *
 	 * This function fetches all groups a user belongs to. It does not check
 	 * if the user exists at all.
 	 */
+	#[\Override]
 	public function getUserGroups($uid) {
 		//guests has empty or null $uid
 		if ($uid === null || $uid === '') {
@@ -242,10 +225,10 @@ class Database extends ABackend implements
 			->from('group_user', 'gu')
 			->leftJoin('gu', 'groups', 'g', $qb->expr()->eq('gu.gid', 'g.gid'))
 			->where($qb->expr()->eq('uid', $qb->createNamedParameter($uid)))
-			->execute();
+			->executeQuery();
 
 		$groups = [];
-		while ($row = $cursor->fetch()) {
+		while ($row = $cursor->fetchAssociative()) {
 			$groups[] = $row['gid'];
 			$this->groupCache[$row['gid']] = [
 				'gid' => $row['gid'],
@@ -266,6 +249,7 @@ class Database extends ABackend implements
 	 *
 	 * Returns a list with all groups
 	 */
+	#[\Override]
 	public function getGroups(string $search = '', int $limit = -1, int $offset = 0) {
 		$this->fixDI();
 
@@ -289,10 +273,10 @@ class Database extends ABackend implements
 		if ($offset > 0) {
 			$query->setFirstResult($offset);
 		}
-		$result = $query->execute();
+		$result = $query->executeQuery();
 
 		$groups = [];
-		while ($row = $result->fetch()) {
+		while ($row = $result->fetchAssociative()) {
 			$this->groupCache[$row['gid']] = [
 				'displayname' => $row['displayname'],
 				'gid' => $row['gid'],
@@ -309,6 +293,7 @@ class Database extends ABackend implements
 	 * @param string $gid
 	 * @return bool
 	 */
+	#[\Override]
 	public function groupExists($gid) {
 		$this->fixDI();
 
@@ -321,8 +306,8 @@ class Database extends ABackend implements
 		$cursor = $qb->select('gid', 'displayname')
 			->from('groups')
 			->where($qb->expr()->eq('gid', $qb->createNamedParameter($gid)))
-			->execute();
-		$result = $cursor->fetch();
+			->executeQuery();
+		$result = $cursor->fetchAssociative();
 		$cursor->closeCursor();
 
 		if ($result !== false) {
@@ -338,6 +323,7 @@ class Database extends ABackend implements
 	/**
 	 * {@inheritdoc}
 	 */
+	#[\Override]
 	public function groupsExists(array $gids): array {
 		$notFoundGids = [];
 		$existingGroups = [];
@@ -354,12 +340,12 @@ class Database extends ABackend implements
 
 		$qb = $this->dbConn->getQueryBuilder();
 		$qb->select('gid', 'displayname')
-				->from('groups')
-				->where($qb->expr()->in('gid', $qb->createParameter('ids')));
-		foreach (array_chunk($notFoundGids, 1000) as $chunk) {
+			->from('groups')
+			->where($qb->expr()->in('gid', $qb->createParameter('ids')));
+		foreach (array_chunk($notFoundGids, IQueryBuilder::MAX_IN_PARAMETERS) as $chunk) {
 			$qb->setParameter('ids', $chunk, IQueryBuilder::PARAM_STR_ARRAY);
 			$result = $qb->executeQuery();
-			while ($row = $result->fetch()) {
+			while ($row = $result->fetchAssociative()) {
 				$this->groupCache[(string)$row['gid']] = [
 					'displayname' => (string)$row['displayname'],
 					'gid' => (string)$row['gid'],
@@ -380,37 +366,51 @@ class Database extends ABackend implements
 	 * @param int $offset
 	 * @return array<int,string> an array of user ids
 	 */
+	#[\Override]
 	public function usersInGroup($gid, $search = '', $limit = -1, $offset = 0): array {
 		return array_values(array_map(fn ($user) => $user->getUid(), $this->searchInGroup($gid, $search, $limit, $offset)));
 	}
 
+	#[\Override]
 	public function searchInGroup(string $gid, string $search = '', int $limit = -1, int $offset = 0): array {
 		$this->fixDI();
 
 		$query = $this->dbConn->getQueryBuilder();
-		$query->select('g.uid', 'u.displayname');
+		$query->select('g.uid', 'dn.value AS displayname');
 
 		$query->from('group_user', 'g')
 			->where($query->expr()->eq('gid', $query->createNamedParameter($gid)))
 			->orderBy('g.uid', 'ASC');
 
-		$query->leftJoin('g', 'users', 'u', $query->expr()->eq('g.uid', 'u.uid'));
+		// Join displayname and email from oc_accounts_data
+		$query->leftJoin('g', 'accounts_data', 'dn',
+			$query->expr()->andX(
+				$query->expr()->eq('dn.uid', 'g.uid'),
+				$query->expr()->eq('dn.name', $query->expr()->literal('displayname'))
+			)
+		);
+
+		$query->leftJoin('g', 'accounts_data', 'em',
+			$query->expr()->andX(
+				$query->expr()->eq('em.uid', 'g.uid'),
+				$query->expr()->eq('em.name', $query->expr()->literal('email'))
+			)
+		);
 
 		if ($search !== '') {
-			$query->leftJoin('u', 'preferences', 'p', $query->expr()->andX(
-				$query->expr()->eq('p.userid', 'u.uid'),
-				$query->expr()->eq('p.appid', $query->expr()->literal('settings')),
-				$query->expr()->eq('p.configkey', $query->expr()->literal('email'))
-			))
-				// sqlite doesn't like re-using a single named parameter here
-				->andWhere(
-					$query->expr()->orX(
-						$query->expr()->ilike('g.uid', $query->createNamedParameter('%' . $this->dbConn->escapeLikeParameter($search) . '%')),
-						$query->expr()->ilike('u.displayname', $query->createNamedParameter('%' . $this->dbConn->escapeLikeParameter($search) . '%')),
-						$query->expr()->ilike('p.configvalue', $query->createNamedParameter('%' . $this->dbConn->escapeLikeParameter($search) . '%'))
-					)
+			// sqlite doesn't like re-using a single named parameter here
+			$searchParam1 = $query->createNamedParameter('%' . $this->dbConn->escapeLikeParameter($search) . '%');
+			$searchParam2 = $query->createNamedParameter('%' . $this->dbConn->escapeLikeParameter($search) . '%');
+			$searchParam3 = $query->createNamedParameter('%' . $this->dbConn->escapeLikeParameter($search) . '%');
+
+			$query->andWhere(
+				$query->expr()->orX(
+					$query->expr()->ilike('g.uid', $searchParam1),
+					$query->expr()->ilike('dn.value', $searchParam2),
+					$query->expr()->ilike('em.value', $searchParam3)
 				)
-				->orderBy('u.uid_lower', 'ASC');
+			)
+				->orderBy('g.uid', 'ASC');
 		}
 
 		if ($limit !== -1) {
@@ -423,8 +423,8 @@ class Database extends ABackend implements
 		$result = $query->executeQuery();
 
 		$users = [];
-		$userManager = \OCP\Server::get(IUserManager::class);
-		while ($row = $result->fetch()) {
+		$userManager = Server::get(IUserManager::class);
+		while ($row = $result->fetchAssociative()) {
 			$users[$row['uid']] = new LazyUser($row['uid'], $userManager, $row['displayname'] ?? null);
 		}
 		$result->closeCursor();
@@ -438,6 +438,7 @@ class Database extends ABackend implements
 	 * @param string $search
 	 * @return int
 	 */
+	#[\Override]
 	public function countUsersInGroup(string $gid, string $search = ''): int {
 		$this->fixDI();
 
@@ -452,7 +453,7 @@ class Database extends ABackend implements
 			)));
 		}
 
-		$result = $query->execute();
+		$result = $query->executeQuery();
 		$count = $result->fetchOne();
 		$result->closeCursor();
 
@@ -472,6 +473,7 @@ class Database extends ABackend implements
 	 *
 	 * @return int
 	 */
+	#[\Override]
 	public function countDisabledInGroup(string $gid): int {
 		$this->fixDI();
 
@@ -484,7 +486,7 @@ class Database extends ABackend implements
 			->andWhere($query->expr()->eq('configvalue', $query->createNamedParameter('false'), IQueryBuilder::PARAM_STR))
 			->andWhere($query->expr()->eq('gid', $query->createNamedParameter($gid), IQueryBuilder::PARAM_STR));
 
-		$result = $query->execute();
+		$result = $query->executeQuery();
 		$count = $result->fetchOne();
 		$result->closeCursor();
 
@@ -497,6 +499,7 @@ class Database extends ABackend implements
 		return $count;
 	}
 
+	#[\Override]
 	public function getDisplayName(string $gid): string {
 		if (isset($this->groupCache[$gid])) {
 			$displayName = $this->groupCache[$gid]['displayname'];
@@ -513,13 +516,14 @@ class Database extends ABackend implements
 			->from('groups')
 			->where($query->expr()->eq('gid', $query->createNamedParameter($gid)));
 
-		$result = $query->execute();
+		$result = $query->executeQuery();
 		$displayName = $result->fetchOne();
 		$result->closeCursor();
 
-		return (string) $displayName;
+		return (string)$displayName;
 	}
 
+	#[\Override]
 	public function getGroupDetails(string $gid): array {
 		$displayName = $this->getDisplayName($gid);
 		if ($displayName !== '') {
@@ -532,9 +536,12 @@ class Database extends ABackend implements
 	/**
 	 * {@inheritdoc}
 	 */
+	#[\Override]
 	public function getGroupsDetails(array $gids): array {
 		$notFoundGids = [];
 		$details = [];
+
+		$this->fixDI();
 
 		// In case the data is already locally accessible, not need to do SQL query
 		// or do a SQL query but with a smaller in clause
@@ -546,14 +553,14 @@ class Database extends ABackend implements
 			}
 		}
 
-		foreach (array_chunk($notFoundGids, 1000) as $chunk) {
+		foreach (array_chunk($notFoundGids, IQueryBuilder::MAX_IN_PARAMETERS) as $chunk) {
 			$query = $this->dbConn->getQueryBuilder();
 			$query->select('gid', 'displayname')
 				->from('groups')
 				->where($query->expr()->in('gid', $query->createNamedParameter($chunk, IQueryBuilder::PARAM_STR_ARRAY)));
 
 			$result = $query->executeQuery();
-			while ($row = $result->fetch()) {
+			while ($row = $result->fetchAssociative()) {
 				$details[(string)$row['gid']] = ['displayName' => (string)$row['displayname']];
 				$this->groupCache[(string)$row['gid']] = [
 					'displayname' => (string)$row['displayname'],
@@ -566,6 +573,7 @@ class Database extends ABackend implements
 		return $details;
 	}
 
+	#[\Override]
 	public function setDisplayName(string $gid, string $displayName): bool {
 		if (!$this->groupExists($gid)) {
 			return false;
@@ -582,7 +590,7 @@ class Database extends ABackend implements
 		$query->update('groups')
 			->set('displayname', $query->createNamedParameter($displayName))
 			->where($query->expr()->eq('gid', $query->createNamedParameter($gid)));
-		$query->execute();
+		$query->executeStatement();
 
 		return true;
 	}
@@ -592,7 +600,17 @@ class Database extends ABackend implements
 	 * @return string the name of the backend to be shown
 	 * @since 21.0.0
 	 */
+	#[\Override]
 	public function getBackendName(): string {
 		return 'Database';
+	}
+
+	/**
+	 * Compute group ID from display name (GIDs are limited to 64 characters in database)
+	 */
+	private function computeGid(string $displayName): string {
+		return mb_strlen($displayName) > 64
+			? hash('sha256', $displayName)
+			: $displayName;
 	}
 }

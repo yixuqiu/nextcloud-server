@@ -2,24 +2,8 @@
 
 declare(strict_types=1);
 /**
- * @copyright Copyright (c) 2022, Joas Schilling <coding@schilljs.com>
- *
- * @author Joas Schilling <coding@schilljs.com>
- *
- * @license AGPL-3.0
- *
- * This code is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License, version 3,
- * as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program. If not, see <http://www.gnu.org/licenses/>
- *
+ * SPDX-FileCopyrightText: 2022 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-only
  */
 
 namespace OCP;
@@ -28,9 +12,12 @@ namespace OCP;
  * @since 24.0.0
  */
 interface IRequestId {
+
 	/**
-	 * Returns an ID for the request, value is not guaranteed to be unique and is mostly meant for logging
-	 * If `mod_unique_id` is installed this value will be taken.
+	 * Returns a request identifier intended primarily for logging and tracing.
+	 *
+	 * The value is not guaranteed to be globally unique. If `mod_unique_id` is
+	 * installed, that value may be used by the implementation.
 	 *
 	 * @return string
 	 * @since 24.0.0

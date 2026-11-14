@@ -3,28 +3,14 @@
 declare(strict_types=1);
 
 /**
- * @copyright Copyright (c) 2023 Côme Chilliet <come.chilliet@nextcloud.com>
- *
- * @author Côme Chilliet <come.chilliet@nextcloud.com>
- *
- * @license GNU AGPL version 3 or any later version
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
- *
+ * SPDX-FileCopyrightText: 2023 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
+
 namespace OCA\Settings\SetupChecks;
 
+use OC\Memcache\Memcached;
+use OCP\ICacheFactory;
 use OCP\IConfig;
 use OCP\IL10N;
 use OCP\IURLGenerator;
@@ -36,32 +22,37 @@ class MemcacheConfigured implements ISetupCheck {
 		private IL10N $l10n,
 		private IConfig $config,
 		private IURLGenerator $urlGenerator,
+		private ICacheFactory $cacheFactory,
 	) {
 	}
 
+	#[\Override]
 	public function getName(): string {
 		return $this->l10n->t('Memcache');
 	}
 
+	#[\Override]
 	public function getCategory(): string {
 		return 'system';
 	}
 
+	#[\Override]
 	public function run(): SetupResult {
 		$memcacheDistributedClass = $this->config->getSystemValue('memcache.distributed', null);
 		$memcacheLockingClass = $this->config->getSystemValue('memcache.locking', null);
 		$memcacheLocalClass = $this->config->getSystemValue('memcache.local', null);
 		$caches = array_filter([$memcacheDistributedClass,$memcacheLockingClass,$memcacheLocalClass]);
-		if (in_array(\OC\Memcache\Memcached::class, array_map(fn (string $class) => ltrim($class, '\\'), $caches))) {
-			if (extension_loaded('memcache')) {
+		if (in_array(Memcached::class, array_map(fn (string $class) => ltrim($class, '\\'), $caches), true)) {
+			// wrong PHP module is installed
+			if (extension_loaded('memcache') && !extension_loaded('memcached')) {
 				return SetupResult::warning(
-					$this->l10n->t('Memcached is configured as distributed cache, but the wrong PHP module "memcache" is installed. \\OC\\Memcache\\Memcached only supports "memcached" and not "memcache".'),
-					'https://code.google.com/p/memcached/wiki/PHPClientComparison'
+					$this->l10n->t('Memcached is configured as distributed cache, but the wrong PHP module ("memcache") is installed. Please install the PHP module "memcached".')
 				);
 			}
+			// required PHP module is missing
 			if (!extension_loaded('memcached')) {
 				return SetupResult::warning(
-					$this->l10n->t('Memcached is configured as distributed cache, but the PHP module "memcached" is not installed.')
+					$this->l10n->t('Memcached is configured as distributed cache, but the PHP module "memcached" is not installed. Please install the PHP module "memcached".')
 				);
 			}
 		}
@@ -71,6 +62,41 @@ class MemcacheConfigured implements ISetupCheck {
 				$this->urlGenerator->linkToDocs('admin-performance')
 			);
 		}
+
+		if ($this->cacheFactory->isLocalCacheAvailable()) {
+			$random = bin2hex(random_bytes(64));
+			$local = $this->cacheFactory->createLocal('setupcheck.local');
+			try {
+				$local->set('test', $random);
+				$local2 = $this->cacheFactory->createLocal('setupcheck.local');
+				$actual = $local2->get('test');
+				$local->remove('test');
+			} catch (\Throwable) {
+				$actual = null;
+			}
+
+			if ($actual !== $random) {
+				return SetupResult::error($this->l10n->t('Failed to write and read a value from local cache.'));
+			}
+		}
+
+		if ($this->cacheFactory->isAvailable()) {
+			$random = bin2hex(random_bytes(64));
+			$distributed = $this->cacheFactory->createDistributed('setupcheck');
+			try {
+				$distributed->set('test', $random);
+				$distributed2 = $this->cacheFactory->createDistributed('setupcheck');
+				$actual = $distributed2->get('test');
+				$distributed->remove('test');
+			} catch (\Throwable) {
+				$actual = null;
+			}
+
+			if ($actual !== $random) {
+				return SetupResult::error($this->l10n->t('Failed to write and read a value from distributed cache.'));
+			}
+		}
+
 		return SetupResult::success($this->l10n->t('Configured'));
 	}
 }

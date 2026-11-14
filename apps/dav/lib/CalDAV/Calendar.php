@@ -1,37 +1,18 @@
 <?php
+
 /**
- * @copyright Copyright (c) 2016, ownCloud, Inc.
- *
- * @author Christoph Wurst <christoph@winzerhof-wurst.at>
- * @author Gary Kim <gary@garykim.dev>
- * @author Georg Ehrke <oc.list@georgehrke.com>
- * @author Joas Schilling <coding@schilljs.com>
- * @author Lukas Reschke <lukas@statuscode.ch>
- * @author Roeland Jago Douma <roeland@famdouma.nl>
- * @author Thomas Citharel <nextcloud@tcit.fr>
- * @author Thomas Müller <thomas.mueller@tmit.eu>
- *
- * @license AGPL-3.0
- *
- * This code is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License, version 3,
- * as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program. If not, see <http://www.gnu.org/licenses/>
- *
+ * SPDX-FileCopyrightText: 2016-2024 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-FileCopyrightText: 2016 ownCloud, Inc.
+ * SPDX-License-Identifier: AGPL-3.0-only
  */
+
 namespace OCA\DAV\CalDAV;
 
 use DateTimeImmutable;
 use DateTimeInterface;
 use OCA\DAV\CalDAV\Trashbin\Plugin as TrashbinPlugin;
 use OCA\DAV\DAV\Sharing\IShareable;
+use OCA\DAV\DAV\Sharing\SharingPrivilegeSetTrait;
 use OCA\DAV\Exception\UnsupportedLimitOnInitialSyncException;
 use OCP\DB\Exception;
 use OCP\IConfig;
@@ -51,12 +32,18 @@ use Sabre\DAV\PropPatch;
  * @property CalDavBackend $caldavBackend
  */
 class Calendar extends \Sabre\CalDAV\Calendar implements IRestorable, IShareable, IMoveTarget {
-	private IConfig $config;
+	use SharingPrivilegeSetTrait;
+
 	protected IL10N $l10n;
 	private bool $useTrashbin = true;
-	private LoggerInterface $logger;
 
-	public function __construct(BackendInterface $caldavBackend, $calendarInfo, IL10N $l10n, IConfig $config, LoggerInterface $logger) {
+	public function __construct(
+		BackendInterface $caldavBackend,
+		array $calendarInfo,
+		IL10N $l10n,
+		private IConfig $config,
+		private LoggerInterface $logger,
+	) {
 		// Convert deletion date to ISO8601 string
 		if (isset($calendarInfo[TrashbinPlugin::PROPERTY_DELETED_AT])) {
 			$calendarInfo[TrashbinPlugin::PROPERTY_DELETED_AT] = (new DateTimeImmutable())
@@ -66,23 +53,29 @@ class Calendar extends \Sabre\CalDAV\Calendar implements IRestorable, IShareable
 
 		parent::__construct($caldavBackend, $calendarInfo);
 
-		if ($this->getName() === BirthdayService::BIRTHDAY_CALENDAR_URI) {
+		if ($this->getName() === BirthdayService::BIRTHDAY_CALENDAR_URI && strcasecmp($this->calendarInfo['{DAV:}displayname'], 'Contact birthdays') === 0) {
 			$this->calendarInfo['{DAV:}displayname'] = $l10n->t('Contact birthdays');
 		}
-		if ($this->getName() === CalDavBackend::PERSONAL_CALENDAR_URI &&
-			$this->calendarInfo['{DAV:}displayname'] === CalDavBackend::PERSONAL_CALENDAR_NAME) {
+		if ($this->getName() === CalDavBackend::PERSONAL_CALENDAR_URI
+			&& $this->calendarInfo['{DAV:}displayname'] === CalDavBackend::PERSONAL_CALENDAR_NAME) {
 			$this->calendarInfo['{DAV:}displayname'] = $l10n->t('Personal');
 		}
-
-		$this->config = $config;
 		$this->l10n = $l10n;
-		$this->logger = $logger;
+	}
+
+	public function getUri(): string {
+		return $this->calendarInfo['uri'];
+	}
+
+	protected function getCalendarType(): int {
+		return CalDavBackend::CALENDAR_TYPE_CALENDAR;
 	}
 
 	/**
 	 * {@inheritdoc}
 	 * @throws Forbidden
 	 */
+	#[\Override]
 	public function updateShares(array $add, array $remove): void {
 		if ($this->isShared()) {
 			throw new Forbidden();
@@ -102,6 +95,7 @@ class Calendar extends \Sabre\CalDAV\Calendar implements IRestorable, IShareable
 	 *
 	 * @return list<array{href: string, commonName: string, status: int, readOnly: bool, '{http://owncloud.org/ns}principal': string, '{http://owncloud.org/ns}group-share': bool}>
 	 */
+	#[\Override]
 	public function getShares(): array {
 		if ($this->isShared()) {
 			return [];
@@ -109,6 +103,7 @@ class Calendar extends \Sabre\CalDAV\Calendar implements IRestorable, IShareable
 		return $this->caldavBackend->getShares($this->getResourceId());
 	}
 
+	#[\Override]
 	public function getResourceId(): int {
 		return $this->calendarInfo['id'];
 	}
@@ -125,6 +120,7 @@ class Calendar extends \Sabre\CalDAV\Calendar implements IRestorable, IShareable
 	 * @param list<array{privilege: string, principal: string, protected: bool}> $acl
 	 * @return list<array{privilege: string, principal: ?string, protected: bool}>
 	 */
+	#[\Override]
 	public function getACL() {
 		$acl = [
 			[
@@ -155,6 +151,11 @@ class Calendar extends \Sabre\CalDAV\Calendar implements IRestorable, IShareable
 				'principal' => $this->getOwner() . '/calendar-proxy-write',
 				'protected' => true,
 			];
+			$acl[] = [
+				'privilege' => '{DAV:}write-acl',
+				'principal' => $this->getOwner(),
+				'protected' => true,
+			];
 		} else {
 			$acl[] = [
 				'privilege' => '{DAV:}write-properties',
@@ -168,12 +169,6 @@ class Calendar extends \Sabre\CalDAV\Calendar implements IRestorable, IShareable
 			];
 		}
 
-		$acl[] = [
-			'privilege' => '{DAV:}write-properties',
-			'principal' => $this->getOwner() . '/calendar-proxy-read',
-			'protected' => true,
-		];
-
 		if (!$this->isShared()) {
 			return $acl;
 		}
@@ -184,16 +179,36 @@ class Calendar extends \Sabre\CalDAV\Calendar implements IRestorable, IShareable
 				'principal' => parent::getOwner(),
 				'protected' => true,
 			];
+			$acl[] = [
+				'privilege' => '{DAV:}read',
+				'principal' => parent::getOwner() . '/calendar-proxy-read',
+				'protected' => true,
+			];
+			$acl[] = [
+				'privilege' => '{DAV:}read',
+				'principal' => parent::getOwner() . '/calendar-proxy-write',
+				'protected' => true,
+			];
 			if ($this->canWrite()) {
 				$acl[] = [
 					'privilege' => '{DAV:}write',
 					'principal' => parent::getOwner(),
 					'protected' => true,
 				];
+				$acl[] = [
+					'privilege' => '{DAV:}write',
+					'principal' => parent::getOwner() . '/calendar-proxy-write',
+					'protected' => true,
+				];
 			} else {
 				$acl[] = [
 					'privilege' => '{DAV:}write-properties',
 					'principal' => parent::getOwner(),
+					'protected' => true,
+				];
+				$acl[] = [
+					'privilege' => '{DAV:}write-properties',
+					'principal' => parent::getOwner() . '/calendar-proxy-write',
 					'protected' => true,
 				];
 			}
@@ -209,10 +224,12 @@ class Calendar extends \Sabre\CalDAV\Calendar implements IRestorable, IShareable
 		$acl = $this->caldavBackend->applyShareAcl($this->getResourceId(), $acl);
 		$allowedPrincipals = [
 			$this->getOwner(),
-			$this->getOwner(). '/calendar-proxy-read',
-			$this->getOwner(). '/calendar-proxy-write',
+			$this->getOwner() . '/calendar-proxy-read',
+			$this->getOwner() . '/calendar-proxy-write',
 			parent::getOwner(),
-			'principals/system/public'
+			parent::getOwner() . '/calendar-proxy-read',
+			parent::getOwner() . '/calendar-proxy-write',
+			'principals/system/public',
 		];
 		/** @var list<array{privilege: string, principal: string, protected: bool}> $acl */
 		$acl = array_filter($acl, function (array $rule) use ($allowedPrincipals): bool {
@@ -221,10 +238,12 @@ class Calendar extends \Sabre\CalDAV\Calendar implements IRestorable, IShareable
 		return $acl;
 	}
 
+	#[\Override]
 	public function getChildACL() {
 		return $this->getACL();
 	}
 
+	#[\Override]
 	public function getOwner(): ?string {
 		if (isset($this->calendarInfo['{http://owncloud.org/ns}owner-principal'])) {
 			return $this->calendarInfo['{http://owncloud.org/ns}owner-principal'];
@@ -232,13 +251,10 @@ class Calendar extends \Sabre\CalDAV\Calendar implements IRestorable, IShareable
 		return parent::getOwner();
 	}
 
+	#[\Override]
 	public function delete() {
-		if (isset($this->calendarInfo['{http://owncloud.org/ns}owner-principal']) &&
-			$this->calendarInfo['{http://owncloud.org/ns}owner-principal'] !== $this->calendarInfo['principaluri']) {
-			$principal = 'principal:' . parent::getOwner();
-			$this->caldavBackend->updateShares($this, [], [
-				$principal
-			]);
+		if ($this->isShared()) {
+			$this->caldavBackend->unshare($this, 'principal:' . $this->getPrincipalURI());
 			return;
 		}
 
@@ -257,6 +273,7 @@ class Calendar extends \Sabre\CalDAV\Calendar implements IRestorable, IShareable
 		);
 	}
 
+	#[\Override]
 	public function propPatch(PropPatch $propPatch) {
 		// parent::propPatch will only update calendars table
 		// if calendar is shared, changes have to be made to the properties table
@@ -265,8 +282,9 @@ class Calendar extends \Sabre\CalDAV\Calendar implements IRestorable, IShareable
 		}
 	}
 
+	#[\Override]
 	public function getChild($name) {
-		$obj = $this->caldavBackend->getCalendarObject($this->calendarInfo['id'], $name);
+		$obj = $this->caldavBackend->getCalendarObject($this->calendarInfo['id'], $name, $this->getCalendarType());
 
 		if (!$obj) {
 			throw new NotFound('Calendar object not found');
@@ -281,8 +299,9 @@ class Calendar extends \Sabre\CalDAV\Calendar implements IRestorable, IShareable
 		return new CalendarObject($this->caldavBackend, $this->l10n, $this->calendarInfo, $obj);
 	}
 
+	#[\Override]
 	public function getChildren() {
-		$objs = $this->caldavBackend->getCalendarObjects($this->calendarInfo['id']);
+		$objs = $this->caldavBackend->getCalendarObjects($this->calendarInfo['id'], $this->getCalendarType());
 		$children = [];
 		foreach ($objs as $obj) {
 			if ($obj['classification'] === CalDavBackend::CLASSIFICATION_PRIVATE && $this->isShared()) {
@@ -294,8 +313,9 @@ class Calendar extends \Sabre\CalDAV\Calendar implements IRestorable, IShareable
 		return $children;
 	}
 
+	#[\Override]
 	public function getMultipleChildren(array $paths) {
-		$objs = $this->caldavBackend->getMultipleCalendarObjects($this->calendarInfo['id'], $paths);
+		$objs = $this->caldavBackend->getMultipleCalendarObjects($this->calendarInfo['id'], $paths, $this->getCalendarType());
 		$children = [];
 		foreach ($objs as $obj) {
 			if ($obj['classification'] === CalDavBackend::CLASSIFICATION_PRIVATE && $this->isShared()) {
@@ -307,8 +327,9 @@ class Calendar extends \Sabre\CalDAV\Calendar implements IRestorable, IShareable
 		return $children;
 	}
 
+	#[\Override]
 	public function childExists($name) {
-		$obj = $this->caldavBackend->getCalendarObject($this->calendarInfo['id'], $name);
+		$obj = $this->caldavBackend->getCalendarObject($this->calendarInfo['id'], $name, $this->getCalendarType());
 		if (!$obj) {
 			return false;
 		}
@@ -319,8 +340,9 @@ class Calendar extends \Sabre\CalDAV\Calendar implements IRestorable, IShareable
 		return true;
 	}
 
+	#[\Override]
 	public function calendarQuery(array $filters) {
-		$uris = $this->caldavBackend->calendarQuery($this->calendarInfo['id'], $filters);
+		$uris = $this->caldavBackend->calendarQuery($this->calendarInfo['id'], $filters, $this->getCalendarType());
 		if ($this->isShared()) {
 			return array_filter($uris, function ($uri) {
 				return $this->childExists($uri);
@@ -384,6 +406,7 @@ class Calendar extends \Sabre\CalDAV\Calendar implements IRestorable, IShareable
 	/**
 	 * @inheritDoc
 	 */
+	#[\Override]
 	public function getChanges($syncToken, $syncLevel, $limit = null) {
 		if (!$syncToken && $limit) {
 			throw new UnsupportedLimitOnInitialSyncException();
@@ -395,8 +418,9 @@ class Calendar extends \Sabre\CalDAV\Calendar implements IRestorable, IShareable
 	/**
 	 * @inheritDoc
 	 */
+	#[\Override]
 	public function restore(): void {
-		$this->caldavBackend->restoreCalendar((int) $this->calendarInfo['id']);
+		$this->caldavBackend->restoreCalendar((int)$this->calendarInfo['id']);
 	}
 
 	public function disableTrashbin(): void {
@@ -406,13 +430,19 @@ class Calendar extends \Sabre\CalDAV\Calendar implements IRestorable, IShareable
 	/**
 	 * @inheritDoc
 	 */
+	#[\Override]
 	public function moveInto($targetName, $sourcePath, INode $sourceNode) {
 		if (!($sourceNode instanceof CalendarObject)) {
 			return false;
 		}
-
 		try {
-			return $this->caldavBackend->moveCalendarObject($sourceNode->getCalendarId(), (int)$this->calendarInfo['id'], $sourceNode->getId(), $sourceNode->getOwner(), $this->getOwner());
+			return $this->caldavBackend->moveCalendarObject(
+				$sourceNode->getOwner(),
+				$sourceNode->getId(),
+				$this->getOwner(),
+				$this->getResourceId(),
+				$targetName,
+			);
 		} catch (Exception $e) {
 			$this->logger->error('Could not move calendar object: ' . $e->getMessage(), ['exception' => $e]);
 			return false;

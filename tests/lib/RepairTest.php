@@ -1,9 +1,9 @@
 <?php
+
 /**
- * Copyright (c) 2014 Vincent Petry <pvince81@owncloud.com>
- * This file is licensed under the Affero General Public License version 3 or
- * later.
- * See the COPYING-README file.
+ * SPDX-FileCopyrightText: 2016-2024 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-FileCopyrightText: 2016 ownCloud, Inc.
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
 namespace Test;
@@ -14,21 +14,24 @@ use OC\Repair\Events\RepairInfoEvent;
 use OC\Repair\Events\RepairStepEvent;
 use OC\Repair\Events\RepairWarningEvent;
 use OCP\EventDispatcher\IEventDispatcher;
+use OCP\Migration\IOutput;
 use OCP\Migration\IRepairStep;
+use OCP\Server;
 use Psr\Log\LoggerInterface;
 
 class TestRepairStep implements IRepairStep {
-	private bool $warning;
-
-	public function __construct(bool $warning = false) {
-		$this->warning = $warning;
+	public function __construct(
+		private bool $warning = false,
+	) {
 	}
 
+	#[\Override]
 	public function getName() {
 		return 'Test Name';
 	}
 
-	public function run(\OCP\Migration\IOutput $out) {
+	#[\Override]
+	public function run(IOutput $out) {
 		if ($this->warning) {
 			$out->warning('Simulated warning');
 		} else {
@@ -43,26 +46,27 @@ class RepairTest extends TestCase {
 	/** @var string[] */
 	private array $outputArray = [];
 
+	#[\Override]
 	protected function setUp(): void {
 		parent::setUp();
-		$dispatcher = \OC::$server->get(IEventDispatcher::class);
+		$dispatcher = Server::get(IEventDispatcher::class);
 		$this->repair = new Repair($dispatcher, $this->createMock(LoggerInterface::class));
 
-		$dispatcher->addListener(RepairWarningEvent::class, function (RepairWarningEvent $event) {
+		$dispatcher->addListener(RepairWarningEvent::class, function (RepairWarningEvent $event): void {
 			$this->outputArray[] = 'warning: ' . $event->getMessage();
 		});
-		$dispatcher->addListener(RepairInfoEvent::class, function (RepairInfoEvent $event) {
+		$dispatcher->addListener(RepairInfoEvent::class, function (RepairInfoEvent $event): void {
 			$this->outputArray[] = 'info: ' . $event->getMessage();
 		});
-		$dispatcher->addListener(RepairStepEvent::class, function (RepairStepEvent $event) {
+		$dispatcher->addListener(RepairStepEvent::class, function (RepairStepEvent $event): void {
 			$this->outputArray[] = 'step: ' . $event->getStepName();
 		});
-		$dispatcher->addListener(RepairErrorEvent::class, function (RepairErrorEvent $event) {
+		$dispatcher->addListener(RepairErrorEvent::class, function (RepairErrorEvent $event): void {
 			$this->outputArray[] = 'error: ' . $event->getMessage();
 		});
 	}
 
-	public function testRunRepairStep() {
+	public function testRunRepairStep(): void {
 		$this->repair->addStep(new TestRepairStep(false));
 		$this->repair->run();
 
@@ -75,7 +79,7 @@ class RepairTest extends TestCase {
 		);
 	}
 
-	public function testRunRepairStepThatFail() {
+	public function testRunRepairStepThatFail(): void {
 		$this->repair->addStep(new TestRepairStep(true));
 		$this->repair->run();
 
@@ -88,11 +92,11 @@ class RepairTest extends TestCase {
 		);
 	}
 
-	public function testRunRepairStepsWithException() {
+	public function testRunRepairStepsWithException(): void {
 		$mock = $this->createMock(TestRepairStep::class);
 		$mock->expects($this->any())
 			->method('run')
-			->will($this->throwException(new \Exception('Exception text')));
+			->willThrowException(new \Exception('Exception text'));
 		$mock->expects($this->any())
 			->method('getName')
 			->willReturn('Exception Test');
@@ -120,7 +124,7 @@ class RepairTest extends TestCase {
 		);
 	}
 
-	public function testRunRepairStepsContinueAfterWarning() {
+	public function testRunRepairStepsContinueAfterWarning(): void {
 		$this->repair->addStep(new TestRepairStep(true));
 		$this->repair->addStep(new TestRepairStep(false));
 		$this->repair->run();

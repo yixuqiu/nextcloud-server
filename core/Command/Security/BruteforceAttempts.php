@@ -2,32 +2,17 @@
 
 declare(strict_types=1);
 /**
- * @copyright Copyright (c) 2023 Joas Schilling <coding@schilljs.com>
- *
- * @author Joas Schilling <coding@schilljs.com>
- *
- * @license GNU AGPL version 3 or any later version
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
- *
+ * SPDX-FileCopyrightText: 2023 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
+
 namespace OC\Core\Command\Security;
 
 use OC\Core\Command\Base;
 use OCP\Security\Bruteforce\IThrottler;
 use Symfony\Component\Console\Input\InputArgument;
 use Symfony\Component\Console\Input\InputInterface;
+use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Output\OutputInterface;
 
 class BruteforceAttempts extends Base {
@@ -37,6 +22,7 @@ class BruteforceAttempts extends Base {
 		parent::__construct();
 	}
 
+	#[\Override]
 	protected function configure(): void {
 		parent::configure();
 		$this
@@ -52,11 +38,20 @@ class BruteforceAttempts extends Base {
 				InputArgument::OPTIONAL,
 				'Only count attempts for the given action',
 			)
+			->addOption(
+				'interval',
+				null,
+				InputOption::VALUE_REQUIRED,
+				'Interval in hours to count attempts for (max 48)',
+				12,
+			)
 		;
 	}
 
+	#[\Override]
 	protected function execute(InputInterface $input, OutputInterface $output): int {
 		$ip = $input->getArgument('ipaddress');
+		$interval = (float)$input->getOption('interval');
 
 		if (!filter_var($ip, FILTER_VALIDATE_IP)) {
 			$output->writeln('<error>"' . $ip . '" is not a valid IP address</error>');
@@ -67,13 +62,17 @@ class BruteforceAttempts extends Base {
 			'bypass-listed' => $this->throttler->isBypassListed($ip),
 			'attempts' => $this->throttler->getAttempts(
 				$ip,
-				(string) $input->getArgument('action'),
+				(string)$input->getArgument('action'),
+				$interval,
 			),
 			'delay' => $this->throttler->getDelay(
 				$ip,
-				(string) $input->getArgument('action'),
+				(string)$input->getArgument('action'),
 			),
 		];
+		if ($input->getOption('output') === 'plain') {
+			$data['delay'] = $data['delay'] . ' ms';
+		}
 
 		$this->writeArrayInOutputFormat($input, $output, $data);
 

@@ -2,25 +2,9 @@
 
 declare(strict_types=1);
 
-/*
- * @copyright 2021 Christoph Wurst <christoph@winzerhof-wurst.at>
- *
- * @author 2021 Christoph Wurst <christoph@winzerhof-wurst.at>
- *
- * @license GNU AGPL version 3 or any later version
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+/**
+ * SPDX-FileCopyrightText: 2021 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
 namespace OCP\Talk;
@@ -46,4 +30,40 @@ interface IConversationOptions {
 	 * @since 24.0.0
 	 */
 	public function setPublic(bool $isPublic = true): self;
+
+	/**
+	 * Date of the meeting if the conversation is tied to a single meeting event
+	 *
+	 * This will be used by the Talk backend to expire the conversation after a
+	 * reasonable amount of time after the meeting unless the conversation is
+	 * being reused.
+	 *
+	 * @param \DateTimeInterface $meetingStartDate
+	 * @param \DateTimeInterface $meetingEndDate
+	 * @return $this
+	 * @since 34.0.0
+	 * @since 33.0.3
+	 * @since 32.0.9
+	 */
+	public function setMeetingDate(\DateTimeInterface $meetingStartDate, \DateTimeInterface $meetingEndDate): self;
+
+	/**
+	 * Start date of the meeting
+	 *
+	 * @return ?\DateTimeInterface
+	 * @since 34.0.0
+	 * @since 33.0.3
+	 * @since 32.0.9
+	 */
+	public function getMeetingStartDate(): ?\DateTimeInterface;
+
+	/**
+	 * End date of the meeting
+	 *
+	 * @return ?\DateTimeInterface
+	 * @since 34.0.0
+	 * @since 33.0.3
+	 * @since 32.0.9
+	 */
+	public function getMeetingEndDate(): ?\DateTimeInterface;
 }

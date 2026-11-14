@@ -1,30 +1,10 @@
 <?php
+
 /**
- * @copyright Copyright (c) 2017 Arthur Schiwon <blizzz@arthur-schiwon.de>
- *
- * @author Arthur Schiwon <blizzz@arthur-schiwon.de>
- * @author Christoph Wurst <christoph@winzerhof-wurst.at>
- * @author Joas Schilling <coding@schilljs.com>
- * @author Julius Härtl <jus@bitgrid.net>
- * @author Morris Jobke <hey@morrisjobke.de>
- * @author Robin Appelman <robin@icewind.nl>
- *
- * @license GNU AGPL version 3 or any later version
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
- *
+ * SPDX-FileCopyrightText: 2017 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
+
 namespace OC\Collaboration\Collaborators;
 
 use OCP\Collaboration\Collaborators\ISearchPlugin;
@@ -61,7 +41,8 @@ class GroupPlugin implements ISearchPlugin {
 		}
 	}
 
-	public function search($search, $limit, $offset, ISearchResult $searchResult): bool {
+	#[\Override]
+	public function search(string $search, int $limit, int $offset, ISearchResult $searchResult): bool {
 		if ($this->groupSharingDisabled) {
 			return false;
 		}
@@ -99,7 +80,7 @@ class GroupPlugin implements ISearchPlugin {
 
 			// FIXME: use a more efficient approach
 			$gid = $group->getGID();
-			if (!in_array($gid, $groupIds)) {
+			if (!in_array($gid, $groupIds, true)) {
 				continue;
 			}
 			if (strtolower($gid) === $lowerSearch || strtolower($group->getDisplayName()) === $lowerSearch) {
@@ -128,7 +109,7 @@ class GroupPlugin implements ISearchPlugin {
 			// On page one we try if the search result has a direct hit on the
 			// user id and if so, we add that to the exact match list
 			$group = $this->groupManager->get($search);
-			if ($group instanceof IGroup && !$group->hideFromCollaboration() && (!$this->shareWithGroupOnly || in_array($group->getGID(), $userGroups))) {
+			if ($group instanceof IGroup && !$group->hideFromCollaboration() && (!$this->shareWithGroupOnly || in_array($group->getGID(), $userGroups, true))) {
 				$result['exact'][] = [
 					'label' => $group->getDisplayName(),
 					'value' => [

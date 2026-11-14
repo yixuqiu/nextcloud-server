@@ -3,27 +3,10 @@
 declare(strict_types=1);
 
 /**
- * @copyright 2018, Roeland Jago Douma <roeland@famdouma.nl>
- *
- * @author Robin Appelman <robin@icewind.nl>
- * @author Roeland Jago Douma <roeland@famdouma.nl>
- *
- * @license GNU AGPL version 3 or any later version
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
- *
+ * SPDX-FileCopyrightText: 2018 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
+
 namespace OCA\Files_Versions\Sabre;
 
 use OCA\Files_Versions\Versions\IDeletableVersionBackend;
@@ -41,14 +24,16 @@ use Sabre\DAV\IFile;
 class VersionFile implements IFile {
 	public function __construct(
 		private IVersion $version,
-		private IVersionManager $versionManager
+		private IVersionManager $versionManager,
 	) {
 	}
 
+	#[\Override]
 	public function put($data) {
 		throw new Forbidden();
 	}
 
+	#[\Override]
 	public function get() {
 		try {
 			return $this->versionManager->read($this->version);
@@ -57,10 +42,12 @@ class VersionFile implements IFile {
 		}
 	}
 
+	#[\Override]
 	public function getContentType(): string {
 		return $this->version->getMimeType();
 	}
 
+	#[\Override]
 	public function getETag(): string {
 		return (string)$this->version->getRevisionId();
 	}
@@ -69,10 +56,12 @@ class VersionFile implements IFile {
 	 * @psalm-suppress ImplementedReturnTypeMismatch \Sabre\DAV\IFile::getSize signature does not support 32bit
 	 * @return int|float
 	 */
+	#[\Override]
 	public function getSize(): int|float {
 		return $this->version->getSize();
 	}
 
+	#[\Override]
 	public function delete() {
 		if ($this->versionManager instanceof IDeletableVersionBackend) {
 			$this->versionManager->deleteVersion($this->version);
@@ -81,10 +70,12 @@ class VersionFile implements IFile {
 		}
 	}
 
+	#[\Override]
 	public function getName(): string {
 		return (string)$this->version->getRevisionId();
 	}
 
+	#[\Override]
 	public function setName($name) {
 		throw new Forbidden();
 	}
@@ -93,7 +84,7 @@ class VersionFile implements IFile {
 		$backend = $this->version->getBackend();
 
 		if ($backend instanceof IMetadataVersionBackend) {
-			$backend->setMetadataValue($this->version->getSourceFile(), $this->version->getRevisionId(), $key, $value);
+			$backend->setMetadataValue($this->version->getSourceFile(), $this->version->getTimestamp(), $key, $value);
 			return true;
 		} elseif ($key === 'label' && $backend instanceof INameableVersionBackend) {
 			$backend->setVersionLabel($this->version, $value);
@@ -112,6 +103,7 @@ class VersionFile implements IFile {
 		return null;
 	}
 
+	#[\Override]
 	public function getLastModified(): int {
 		return $this->version->getTimestamp();
 	}

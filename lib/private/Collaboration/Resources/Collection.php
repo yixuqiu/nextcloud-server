@@ -3,28 +3,10 @@
 declare(strict_types=1);
 
 /**
- * @copyright Copyright (c) 2018 Joas Schilling <coding@schilljs.com>
- *
- * @author Christoph Wurst <christoph@winzerhof-wurst.at>
- * @author Joas Schilling <coding@schilljs.com>
- * @author Roeland Jago Douma <roeland@famdouma.nl>
- *
- * @license GNU AGPL version 3 or any later version
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
- *
+ * SPDX-FileCopyrightText: 2018 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
+
 namespace OC\Collaboration\Resources;
 
 use Doctrine\DBAL\Exception\ConstraintViolationException;
@@ -47,13 +29,14 @@ class Collection implements ICollection {
 		protected int $id,
 		protected string $name,
 		protected ?IUser $userForAccess = null,
-		protected ?bool $access = null
+		protected ?bool $access = null,
 	) {
 	}
 
 	/**
 	 * @since 16.0.0
 	 */
+	#[\Override]
 	public function getId(): int {
 		return $this->id;
 	}
@@ -61,6 +44,7 @@ class Collection implements ICollection {
 	/**
 	 * @since 16.0.0
 	 */
+	#[\Override]
 	public function getName(): string {
 		return $this->name;
 	}
@@ -68,12 +52,13 @@ class Collection implements ICollection {
 	/**
 	 * @since 16.0.0
 	 */
+	#[\Override]
 	public function setName(string $name): void {
 		$query = $this->connection->getQueryBuilder();
 		$query->update(Manager::TABLE_COLLECTIONS)
 			->set('name', $query->createNamedParameter($name))
 			->where($query->expr()->eq('id', $query->createNamedParameter($this->getId(), IQueryBuilder::PARAM_INT)));
-		$query->execute();
+		$query->executeStatement();
 
 		$this->name = $name;
 	}
@@ -82,6 +67,7 @@ class Collection implements ICollection {
 	 * @return IResource[]
 	 * @since 16.0.0
 	 */
+	#[\Override]
 	public function getResources(): array {
 		if (empty($this->resources)) {
 			$this->resources = $this->manager->getResourcesByCollectionForUser($this, $this->userForAccess);
@@ -96,8 +82,9 @@ class Collection implements ICollection {
 	 * @throws ResourceException when the resource is already part of the collection
 	 * @since 16.0.0
 	 */
+	#[\Override]
 	public function addResource(IResource $resource): void {
-		array_map(function (IResource $r) use ($resource) {
+		array_map(function (IResource $r) use ($resource): void {
 			if ($this->isSameResource($r, $resource)) {
 				throw new ResourceException('Already part of the collection');
 			}
@@ -114,7 +101,7 @@ class Collection implements ICollection {
 			]);
 
 		try {
-			$query->execute();
+			$query->executeStatement();
 		} catch (ConstraintViolationException $e) {
 			throw new ResourceException('Already part of the collection');
 		}
@@ -127,6 +114,7 @@ class Collection implements ICollection {
 	 *
 	 * @since 16.0.0
 	 */
+	#[\Override]
 	public function removeResource(IResource $resource): void {
 		$this->resources = array_filter($this->getResources(), function (IResource $r) use ($resource) {
 			return !$this->isSameResource($r, $resource);
@@ -137,7 +125,7 @@ class Collection implements ICollection {
 			->where($query->expr()->eq('collection_id', $query->createNamedParameter($this->id, IQueryBuilder::PARAM_INT)))
 			->andWhere($query->expr()->eq('resource_type', $query->createNamedParameter($resource->getType())))
 			->andWhere($query->expr()->eq('resource_id', $query->createNamedParameter($resource->getId())));
-		$query->execute();
+		$query->executeStatement();
 
 		if (empty($this->resources)) {
 			$this->removeCollection();
@@ -151,6 +139,7 @@ class Collection implements ICollection {
 	 *
 	 * @since 16.0.0
 	 */
+	#[\Override]
 	public function canAccess(?IUser $user): bool {
 		if ($user instanceof IUser) {
 			return $this->canUserAccess($user);
@@ -183,15 +172,15 @@ class Collection implements ICollection {
 	}
 
 	protected function isSameResource(IResource $resource1, IResource $resource2): bool {
-		return $resource1->getType() === $resource2->getType() &&
-			$resource1->getId() === $resource2->getId();
+		return $resource1->getType() === $resource2->getType()
+			&& $resource1->getId() === $resource2->getId();
 	}
 
 	protected function removeCollection(): void {
 		$query = $this->connection->getQueryBuilder();
 		$query->delete(Manager::TABLE_COLLECTIONS)
 			->where($query->expr()->eq('id', $query->createNamedParameter($this->id, IQueryBuilder::PARAM_INT)));
-		$query->execute();
+		$query->executeStatement();
 
 		$this->manager->invalidateAccessCacheForCollection($this);
 		$this->id = 0;

@@ -1,107 +1,63 @@
 <?php
+
 /**
- * @copyright Copyright (c) 2016, ownCloud, Inc.
- *
- * @author Arthur Schiwon <blizzz@arthur-schiwon.de>
- * @author Christopher Schäpers <kondou@ts.unde.re>
- * @author Christoph Wurst <christoph@winzerhof-wurst.at>
- * @author Joas Schilling <coding@schilljs.com>
- * @author Lukas Reschke <lukas@statuscode.ch>
- * @author Morris Jobke <hey@morrisjobke.de>
- * @author Robin McCorkell <robin@mccorkell.me.uk>
- * @author Roger Szabo <roger.szabo@web.de>
- * @author root <root@localhost.localdomain>
- * @author Thomas Müller <thomas.mueller@tmit.eu>
- * @author Vinicius Cubas Brand <vinicius@eita.org.br>
- *
- * @license AGPL-3.0
- *
- * This code is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License, version 3,
- * as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program. If not, see <http://www.gnu.org/licenses/>
- *
+ * SPDX-FileCopyrightText: 2016-2024 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-FileCopyrightText: 2016 ownCloud, Inc.
+ * SPDX-License-Identifier: AGPL-3.0-only
  */
+
 namespace OCA\User_LDAP;
 
 use OCA\User_LDAP\User\DeletedUsersIndex;
 use OCA\User_LDAP\User\OfflineUser;
 use OCA\User_LDAP\User\User;
-use OCP\IConfig;
 use OCP\IUserBackend;
-use OCP\IUserSession;
+use OCP\LDAP\Exceptions\MultipleUsersReturnedException;
 use OCP\Notification\IManager as INotificationManager;
 use OCP\User\Backend\ICountMappedUsersBackend;
-use OCP\User\Backend\ICountUsersBackend;
+use OCP\User\Backend\IGetDisplayNameBackend;
+use OCP\User\Backend\IGetUserNameFromLoginNameBackend;
+use OCP\User\Backend\ILimitAwareCountUsersBackend;
+use OCP\User\Backend\IPropertyPermissionBackend;
 use OCP\User\Backend\IProvideEnabledStateBackend;
 use OCP\UserInterface;
+use Override;
 use Psr\Log\LoggerInterface;
 
-class User_Proxy extends Proxy implements IUserBackend, UserInterface, IUserLDAP, ICountUsersBackend, ICountMappedUsersBackend, IProvideEnabledStateBackend {
-	/** @var User_LDAP[] */
-	private array $backends = [];
-	private ?User_LDAP $refBackend = null;
-
-	private bool $isSetUp = false;
-	private Helper $helper;
-	private IConfig $ocConfig;
-	private INotificationManager $notificationManager;
-	private IUserSession $userSession;
-	private UserPluginManager $userPluginManager;
-	private LoggerInterface $logger;
-	private DeletedUsersIndex $deletedUsersIndex;
-
+/**
+ * @template-extends Proxy<User_LDAP>
+ */
+class User_Proxy extends Proxy implements
+	IUserBackend,
+	UserInterface,
+	IUserLDAP,
+	ILimitAwareCountUsersBackend,
+	ICountMappedUsersBackend,
+	IProvideEnabledStateBackend,
+	IGetDisplayNameBackend,
+	IPropertyPermissionBackend,
+	IGetUserNameFromLoginNameBackend {
 	public function __construct(
 		Helper $helper,
 		ILDAPWrapper $ldap,
 		AccessFactory $accessFactory,
-		IConfig $ocConfig,
-		INotificationManager $notificationManager,
-		IUserSession $userSession,
-		UserPluginManager $userPluginManager,
-		LoggerInterface $logger,
-		DeletedUsersIndex $deletedUsersIndex,
+		private readonly INotificationManager $notificationManager,
+		private readonly UserPluginManager $userPluginManager,
+		private readonly LoggerInterface $logger,
+		private readonly DeletedUsersIndex $deletedUsersIndex,
 	) {
-		parent::__construct($ldap, $accessFactory);
-		$this->helper = $helper;
-		$this->ocConfig = $ocConfig;
-		$this->notificationManager = $notificationManager;
-		$this->userSession = $userSession;
-		$this->userPluginManager = $userPluginManager;
-		$this->logger = $logger;
-		$this->deletedUsersIndex = $deletedUsersIndex;
+		parent::__construct($helper, $ldap, $accessFactory);
 	}
 
-	protected function setup(): void {
-		if ($this->isSetUp) {
-			return;
-		}
-
-		$serverConfigPrefixes = $this->helper->getServerConfigurationPrefixes(true);
-		foreach ($serverConfigPrefixes as $configPrefix) {
-			$this->backends[$configPrefix] = new User_LDAP(
-				$this->getAccess($configPrefix),
-				$this->ocConfig,
-				$this->notificationManager,
-				$this->userSession,
-				$this->userPluginManager,
-				$this->logger,
-				$this->deletedUsersIndex,
-			);
-
-			if (is_null($this->refBackend)) {
-				$this->refBackend = $this->backends[$configPrefix];
-			}
-		}
-
-		$this->isSetUp = true;
+	#[\Override]
+	protected function newInstance(string $configPrefix): User_LDAP {
+		return new User_LDAP(
+			$this->getAccess($configPrefix),
+			$this->notificationManager,
+			$this->userPluginManager,
+			$this->logger,
+			$this->deletedUsersIndex,
+		);
 	}
 
 	/**
@@ -112,6 +68,7 @@ class User_Proxy extends Proxy implements IUserBackend, UserInterface, IUserLDAP
 	 * @param array $parameters an array of parameters to be passed
 	 * @return mixed the result of the method or false
 	 */
+	#[\Override]
 	protected function walkBackends($id, $method, $parameters) {
 		$this->setup();
 
@@ -142,6 +99,7 @@ class User_Proxy extends Proxy implements IUserBackend, UserInterface, IUserLDAP
 	 * @param mixed $passOnWhen the result matches this variable
 	 * @return mixed the result of the method or false
 	 */
+	#[\Override]
 	protected function callOnLastSeenOn($id, $method, $parameters, $passOnWhen) {
 		$this->setup();
 
@@ -174,6 +132,7 @@ class User_Proxy extends Proxy implements IUserBackend, UserInterface, IUserLDAP
 		return false;
 	}
 
+	#[\Override]
 	protected function activeBackends(): int {
 		$this->setup();
 		return count($this->backends);
@@ -188,6 +147,7 @@ class User_Proxy extends Proxy implements IUserBackend, UserInterface, IUserLDAP
 	 * Returns the supported actions as int to be
 	 * compared with \OC\User\Backend::CREATE_USER etc.
 	 */
+	#[\Override]
 	public function implementsActions($actions) {
 		$this->setup();
 		//it's the same across all our user backends obviously
@@ -199,6 +159,7 @@ class User_Proxy extends Proxy implements IUserBackend, UserInterface, IUserLDAP
 	 *
 	 * @return string the name of the backend to be shown
 	 */
+	#[\Override]
 	public function getBackendName() {
 		$this->setup();
 		return $this->refBackend->getBackendName();
@@ -212,6 +173,7 @@ class User_Proxy extends Proxy implements IUserBackend, UserInterface, IUserLDAP
 	 * @param null|int $offset
 	 * @return string[] an array of all uids
 	 */
+	#[\Override]
 	public function getUsers($search = '', $limit = 10, $offset = 0) {
 		$this->setup();
 
@@ -232,6 +194,7 @@ class User_Proxy extends Proxy implements IUserBackend, UserInterface, IUserLDAP
 	 * @param string $uid the username
 	 * @return boolean
 	 */
+	#[\Override]
 	public function userExists($uid) {
 		$existsOnLDAP = false;
 		$existsLocally = $this->handleRequest($uid, 'userExists', [$uid]);
@@ -254,8 +217,8 @@ class User_Proxy extends Proxy implements IUserBackend, UserInterface, IUserLDAP
 	/**
 	 * check if a user exists on LDAP
 	 *
-	 * @param string|\OCA\User_LDAP\User\User $user either the Nextcloud user
-	 * name or an instance of that user
+	 * @param string|User $user either the Nextcloud user
+	 *                          name or an instance of that user
 	 */
 	public function userExistsOnLDAP($user, bool $ignoreCache = false): bool {
 		$id = ($user instanceof User) ? $user->getUsername() : $user;
@@ -275,15 +238,10 @@ class User_Proxy extends Proxy implements IUserBackend, UserInterface, IUserLDAP
 		return $this->handleRequest($uid, 'checkPassword', [$uid, $password]);
 	}
 
-	/**
-	 * returns the username for the given login name, if available
-	 *
-	 * @param string $loginName
-	 * @return string|false
-	 */
-	public function loginName2UserName($loginName) {
+	#[Override]
+	public function getUserNameFromLoginName(string $loginName): string|false {
 		$id = 'LOGINNAME,' . $loginName;
-		return $this->handleRequest($id, 'loginName2UserName', [$loginName]);
+		return $this->handleRequest($id, 'getUserNameFromLoginName', [$loginName]);
 	}
 
 	/**
@@ -292,6 +250,7 @@ class User_Proxy extends Proxy implements IUserBackend, UserInterface, IUserLDAP
 	 * @param string $dn
 	 * @return string|false with the username
 	 */
+	#[\Override]
 	public function dn2UserName($dn) {
 		$id = 'DN,' . $dn;
 		return $this->handleRequest($id, 'dn2UserName', [$dn]);
@@ -313,7 +272,8 @@ class User_Proxy extends Proxy implements IUserBackend, UserInterface, IUserLDAP
 	 * @param string $uid user ID of the user
 	 * @return string display name
 	 */
-	public function getDisplayName($uid) {
+	#[\Override]
+	public function getDisplayName($uid): string {
 		return $this->handleRequest($uid, 'getDisplayName', [$uid]);
 	}
 
@@ -329,7 +289,7 @@ class User_Proxy extends Proxy implements IUserBackend, UserInterface, IUserLDAP
 	}
 
 	/**
-	 * checks whether the user is allowed to change his avatar in Nextcloud
+	 * checks whether the user is allowed to change their avatar in Nextcloud
 	 *
 	 * @param string $uid the Nextcloud user name
 	 * @return boolean either the user can or cannot
@@ -346,6 +306,7 @@ class User_Proxy extends Proxy implements IUserBackend, UserInterface, IUserLDAP
 	 * @param int|null $offset
 	 * @return array an array of all displayNames (value) and the corresponding uids (key)
 	 */
+	#[\Override]
 	public function getDisplayNames($search = '', $limit = null, $offset = null) {
 		$this->setup();
 
@@ -368,6 +329,7 @@ class User_Proxy extends Proxy implements IUserBackend, UserInterface, IUserLDAP
 	 *
 	 * Deletes a user
 	 */
+	#[\Override]
 	public function deleteUser($uid) {
 		return $this->handleRequest($uid, 'deleteUser', [$uid]);
 	}
@@ -387,6 +349,7 @@ class User_Proxy extends Proxy implements IUserBackend, UserInterface, IUserLDAP
 	/**
 	 * @return bool
 	 */
+	#[\Override]
 	public function hasUserListings() {
 		$this->setup();
 		return $this->refBackend->hasUserListings();
@@ -394,17 +357,22 @@ class User_Proxy extends Proxy implements IUserBackend, UserInterface, IUserLDAP
 
 	/**
 	 * Count the number of users
-	 *
-	 * @return int|false
 	 */
-	public function countUsers() {
+	#[\Override]
+	public function countUsers(int $limit = 0): int|false {
 		$this->setup();
 
 		$users = false;
 		foreach ($this->backends as $backend) {
-			$backendUsers = $backend->countUsers();
+			$backendUsers = $backend->countUsers($limit);
 			if ($backendUsers !== false) {
 				$users = (int)$users + $backendUsers;
+				if ($limit > 0) {
+					if ($users >= $limit) {
+						break;
+					}
+					$limit -= $users;
+				}
 			}
 		}
 		return $users;
@@ -413,6 +381,7 @@ class User_Proxy extends Proxy implements IUserBackend, UserInterface, IUserLDAP
 	/**
 	 * Count the number of mapped users
 	 */
+	#[\Override]
 	public function countMappedUsers(): int {
 		$this->setup();
 
@@ -429,6 +398,7 @@ class User_Proxy extends Proxy implements IUserBackend, UserInterface, IUserLDAP
 	 * @param string $uid
 	 * @return Access instance of Access for LDAP interaction
 	 */
+	#[\Override]
 	public function getLDAPAccess($uid) {
 		return $this->handleRequest($uid, 'getLDAPAccess', [$uid]);
 	}
@@ -440,6 +410,7 @@ class User_Proxy extends Proxy implements IUserBackend, UserInterface, IUserLDAP
 	 * @param string $uid
 	 * @return \LDAP\Connection The LDAP connection
 	 */
+	#[\Override]
 	public function getNewLDAPConnection($uid) {
 		return $this->handleRequest($uid, 'getNewLDAPConnection', [$uid]);
 	}
@@ -455,22 +426,59 @@ class User_Proxy extends Proxy implements IUserBackend, UserInterface, IUserLDAP
 		return $this->handleRequest($username, 'createUser', [$username, $password]);
 	}
 
+	#[\Override]
 	public function isUserEnabled(string $uid, callable $queryDatabaseValue): bool {
 		return $this->handleRequest($uid, 'isUserEnabled', [$uid, $queryDatabaseValue]);
 	}
 
+	#[\Override]
 	public function setUserEnabled(string $uid, bool $enabled, callable $queryDatabaseValue, callable $setDatabaseValue): bool {
 		return $this->handleRequest($uid, 'setUserEnabled', [$uid, $enabled, $queryDatabaseValue, $setDatabaseValue]);
 	}
 
-	public function getDisabledUserList(?int $limit = null, int $offset = 0): array {
+	#[\Override]
+	public function getDisabledUserList(?int $limit = null, int $offset = 0, string $search = ''): array {
+		if ((int)$this->getAccess(array_key_first($this->backends) ?? '')->connection->markRemnantsAsDisabled !== 1) {
+			return [];
+		}
+		$disabledUsers = $this->deletedUsersIndex->getUsers();
+		if ($search !== '') {
+			$disabledUsers = array_filter(
+				$disabledUsers,
+				fn (OfflineUser $user): bool
+					=> mb_stripos($user->getOCName(), $search) !== false
+					|| mb_stripos($user->getUID(), $search) !== false
+					|| mb_stripos($user->getDisplayName(), $search) !== false
+					|| mb_stripos($user->getEmail(), $search) !== false,
+			);
+		}
 		return array_map(
 			fn (OfflineUser $user) => $user->getOCName(),
 			array_slice(
-				$this->deletedUsersIndex->getUsers(),
+				$disabledUsers,
 				$offset,
 				$limit
 			)
 		);
+	}
+
+	#[\Override]
+	public function canEditProperty(string $uid, string $property): bool {
+		return $this->handleRequest($uid, 'canEditProperty', [$uid, $property]);
+	}
+
+	#[Override]
+	public function getUserFromCustomAttribute(string $attribute, string $searchTerm): ?string {
+		$this->setup();
+		$user = null;
+		foreach ($this->backends as $backend) {
+			$fetchUser = $backend->getUserFromCustomAttribute($attribute, $searchTerm);
+			// if we found a different user, no need to continue
+			if ($user !== null && $fetchUser !== null && $fetchUser !== $user) {
+				throw new MultipleUsersReturnedException('Multiple users found for custom attribute search');
+			}
+			$user = $fetchUser; // may be null
+		}
+		return $user;
 	}
 }

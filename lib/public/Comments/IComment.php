@@ -1,29 +1,14 @@
 <?php
+
 /**
- * @copyright Copyright (c) 2016, ownCloud, Inc.
- *
- * @author Arthur Schiwon <blizzz@arthur-schiwon.de>
- * @author Christoph Wurst <christoph@winzerhof-wurst.at>
- * @author Joas Schilling <coding@schilljs.com>
- * @author Roeland Jago Douma <roeland@famdouma.nl>
- * @author Thomas Müller <thomas.mueller@tmit.eu>
- *
- * @license AGPL-3.0
- *
- * This code is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License, version 3,
- * as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program. If not, see <http://www.gnu.org/licenses/>
- *
+ * SPDX-FileCopyrightText: 2016-2024 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-FileCopyrightText: 2016 ownCloud, Inc.
+ * SPDX-License-Identifier: AGPL-3.0-only
  */
+
 namespace OCP\Comments;
+
+use JsonSerializable;
 
 /**
  * Interface IComment
@@ -32,7 +17,7 @@ namespace OCP\Comments;
  *
  * @since 9.0.0
  */
-interface IComment {
+interface IComment extends JsonSerializable {
 	/**
 	 * @since 9.0.0
 	 */
@@ -89,7 +74,6 @@ interface IComment {
 	 */
 	public function getTopmostParentId();
 
-
 	/**
 	 * sets the topmost parent ID and returns itself
 	 *
@@ -141,24 +125,18 @@ interface IComment {
 	/**
 	 * returns an array containing mentions that are included in the comment
 	 *
+	 * @param bool $supportMarkdown
 	 * @return array each mention provides a 'type' and an 'id', see example below
+	 * @psalm-return list<array{type: 'guest'|'email'|'federated_group'|'group'|'federated_team'|'team'|'federated_user'|'matrix'|'user', id: non-empty-lowercase-string}>
+	 * @since 36.0.0 Type 'matrix' is supported
+	 * @since 33.0.1 Parameter $supportMarkdown was added to decide if mentions inside markdown code blocks should be ignored (default to true)
+	 * @since 30.0.2 Type 'email' is supported
+	 * @since 29.0.0 Types 'federated_group', 'federated_team', 'team' and 'federated_user' are supported
+	 * @since 23.0.0 Type 'group' is supported
+	 * @since 17.0.0 Type 'guest' is supported
 	 * @since 11.0.0
-	 *
-	 * The return array looks like:
-	 * [
-	 *   [
-	 *     'type' => 'user',
-	 *     'id' => 'citizen4'
-	 *   ],
-	 *   [
-	 *     'type' => 'group',
-	 *     'id' => 'media'
-	 *   ],
-	 *   …
-	 * ]
-	 *
 	 */
-	public function getMentions();
+	public function getMentions(bool $supportMarkdown = true);
 
 	/**
 	 * returns the verb of the comment

@@ -1,33 +1,17 @@
 <?php
+
 /**
- * @copyright Copyright (c) 2016, ownCloud, Inc.
- *
- * @author Christoph Wurst <christoph@winzerhof-wurst.at>
- * @author Joas Schilling <coding@schilljs.com>
- * @author Lukas Reschke <lukas@statuscode.ch>
- * @author Victor Dubiniuk <dubiniuk@owncloud.com>
- *
- * @license AGPL-3.0
- *
- * This code is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License, version 3,
- * as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program. If not, see <http://www.gnu.org/licenses/>
- *
+ * SPDX-FileCopyrightText: 2016-2024 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-FileCopyrightText: 2016 ownCloud, Inc.
+ * SPDX-License-Identifier: AGPL-3.0-only
  */
+
 namespace OC\Core\Command\Integrity;
 
 use OC\IntegrityCheck\Checker;
 use OC\IntegrityCheck\Helpers\FileAccessHelper;
-use phpseclib\Crypt\RSA;
-use phpseclib\File\X509;
+use phpseclib3\Crypt\RSA;
+use phpseclib3\File\X509;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Input\InputOption;
@@ -46,6 +30,7 @@ class SignCore extends Command {
 		parent::__construct(null);
 	}
 
+	#[\Override]
 	protected function configure() {
 		$this
 			->setName('integrity:sign-core')
@@ -58,6 +43,7 @@ class SignCore extends Command {
 	/**
 	 * {@inheritdoc }
 	 */
+	#[\Override]
 	protected function execute(InputInterface $input, OutputInterface $output): int {
 		$privateKeyPath = $input->getOption('privateKey');
 		$keyBundlePath = $input->getOption('certificate');
@@ -80,8 +66,7 @@ class SignCore extends Command {
 			return 1;
 		}
 
-		$rsa = new RSA();
-		$rsa->loadKey($privateKey);
+		$rsa = RSA::loadPrivateKey($privateKey);
 		$x509 = new X509();
 		$x509->loadX509($keyBundle);
 		$x509->setPrivateKey($rsa);

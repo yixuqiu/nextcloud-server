@@ -1,25 +1,10 @@
 <?php
+
 /**
- * @copyright Copyright (c) 2023 John Molakvoæ <skjnldsv@protonmail.com>
- *
- * @author John Molakvoæ <skjnldsv@protonmail.com>
- *
- * @license GNU AGPL version 3 or any later version
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
- *
+ * SPDX-FileCopyrightText: 2023 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
+
 namespace OCA\Files\Service;
 
 use OCA\Files\AppInfo\Application;
@@ -50,12 +35,12 @@ class ViewConfig {
 			'allowed' => [true, false],
 		],
 	];
-
-	protected IConfig $config;
 	protected ?IUser $user = null;
 
-	public function __construct(IConfig $config, IUserSession $userSession) {
-		$this->config = $config;
+	public function __construct(
+		protected IConfig $config,
+		IUserSession $userSession,
+	) {
 		$this->user = $userSession->getUser();
 	}
 
@@ -117,10 +102,12 @@ class ViewConfig {
 			throw new \Exception('Unknown view');
 		}
 
-		if (!in_array($key, $this->getAllowedConfigKeys())) {
+		if (!in_array($key, $this->getAllowedConfigKeys(), true)) {
 			throw new \InvalidArgumentException('Unknown config key');
 		}
-	
+
+		// $value is a string, but allowed values may be booleans (e.g. for toggle configs), so comparison must stay loose
+		/** @psalm-suppress UnrecognizedExpression */
 		if (!in_array($value, $this->getAllowedConfigValues($key))
 			&& !empty($this->getAllowedConfigValues($key))) {
 			throw new \InvalidArgumentException('Invalid config value');
@@ -149,7 +136,7 @@ class ViewConfig {
 
 		$userId = $this->user->getUID();
 		$configs = json_decode($this->config->getUserValue($userId, Application::APP_ID, self::CONFIG_KEY, '[]'), true);
-		
+
 		if (!isset($configs[$view])) {
 			$configs[$view] = [];
 		}
@@ -175,7 +162,7 @@ class ViewConfig {
 		$userId = $this->user->getUID();
 		$configs = json_decode($this->config->getUserValue($userId, Application::APP_ID, self::CONFIG_KEY, '[]'), true);
 		$views = array_keys($configs);
-		
+
 		return array_reduce($views, function ($carry, $view) use ($configs) {
 			$carry[$view] = $this->getConfig($view);
 			return $carry;

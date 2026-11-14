@@ -3,28 +3,10 @@
 declare(strict_types=1);
 
 /**
- * @copyright Copyright (c) 2020, Georg Ehrke
- *
- * @author Georg Ehrke <oc.list@georgehrke.com>
- * @author Joas Schilling <coding@schilljs.com>
- * @author John Molakvoæ <skjnldsv@protonmail.com>
- *
- * @license GNU AGPL version 3 or any later version
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
- *
+ * SPDX-FileCopyrightText: 2020 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
+
 namespace OCA\DAV\Search;
 
 use OCA\DAV\CardDAV\CardDavBackend;
@@ -42,14 +24,14 @@ use Sabre\VObject\Component\VCard;
 use Sabre\VObject\Reader;
 
 class ContactsSearchProvider implements IFilteringProvider {
-	private static array $searchPropertiesRestricted = [
+	private const array SEARCH_PROPERTIES_RESTRICTED = [
 		'N',
 		'FN',
 		'NICKNAME',
 		'EMAIL',
 	];
 
-	private static array $searchProperties = [
+	private const array SEARCH_PROPERTIES = [
 		'N',
 		'FN',
 		'NICKNAME',
@@ -72,6 +54,7 @@ class ContactsSearchProvider implements IFilteringProvider {
 	/**
 	 * @inheritDoc
 	 */
+	#[\Override]
 	public function getId(): string {
 		return 'contacts';
 	}
@@ -79,10 +62,12 @@ class ContactsSearchProvider implements IFilteringProvider {
 	/**
 	 * @inheritDoc
 	 */
+	#[\Override]
 	public function getName(): string {
 		return $this->l10n->t('Contacts');
 	}
 
+	#[\Override]
 	public function getOrder(string $route, array $routeParameters): ?int {
 		if ($this->appManager->isEnabledForUser('contacts')) {
 			return $route === 'contacts.Page.index' ? -1 : 25;
@@ -91,6 +76,7 @@ class ContactsSearchProvider implements IFilteringProvider {
 		return null;
 	}
 
+	#[\Override]
 	public function search(IUser $user, ISearchQuery $query): SearchResult {
 		if (!$this->appManager->isEnabledForUser('contacts', $user)) {
 			return SearchResult::complete($this->getName(), []);
@@ -100,13 +86,13 @@ class ContactsSearchProvider implements IFilteringProvider {
 		$addressBooks = $this->backend->getAddressBooksForUser($principalUri);
 		$addressBooksById = [];
 		foreach ($addressBooks as $addressBook) {
-			$addressBooksById[(int) $addressBook['id']] = $addressBook;
+			$addressBooksById[(int)$addressBook['id']] = $addressBook;
 		}
 
 		$searchResults = $this->backend->searchPrincipalUri(
 			$principalUri,
 			$query->getFilter('term')?->get() ?? '',
-			$query->getFilter('title-only')?->get() ? self::$searchPropertiesRestricted : self::$searchProperties,
+			$query->getFilter('title-only')?->get() ? self::SEARCH_PROPERTIES_RESTRICTED : self::SEARCH_PROPERTIES,
 			[
 				'limit' => $query->getLimit(),
 				'offset' => $query->getCursor(),
@@ -128,9 +114,14 @@ class ContactsSearchProvider implements IFilteringProvider {
 
 			$title = (string)$vCard->FN;
 			$subline = $this->generateSubline($vCard);
-			$resourceUrl = $this->getDeepLinkToContactsApp($addressBook['uri'], (string) $vCard->UID);
+			$resourceUrl = $this->getDeepLinkToContactsApp($addressBook['uri'], (string)$vCard->UID);
 
-			return new SearchResultEntry($thumbnailUrl, $title, $subline, $resourceUrl, 'icon-contacts-dark', true);
+			$result = new SearchResultEntry($thumbnailUrl, $title, $subline, $resourceUrl, 'icon-contacts-dark', true);
+			$result->addAttribute('displayName', $title);
+			$result->addAttribute('email', $subline);
+			$result->addAttribute('phoneNumber', (string)$vCard->TEL);
+
+			return $result;
 		}, $searchResults);
 
 		return SearchResult::paginated(
@@ -183,6 +174,7 @@ class ContactsSearchProvider implements IFilteringProvider {
 		return (string)$emailAddresses[0];
 	}
 
+	#[\Override]
 	public function getSupportedFilters(): array {
 		return [
 			'term',
@@ -193,10 +185,12 @@ class ContactsSearchProvider implements IFilteringProvider {
 		];
 	}
 
+	#[\Override]
 	public function getAlternateIds(): array {
 		return [];
 	}
 
+	#[\Override]
 	public function getCustomFilters(): array {
 		return [
 			new FilterDefinition('company'),

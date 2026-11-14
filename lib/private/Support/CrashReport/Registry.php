@@ -3,32 +3,15 @@
 declare(strict_types=1);
 
 /**
- * @copyright Copyright (c) 2016 Christoph Wurst <christoph@winzerhof-wurst.at>
- *
- * @author Christoph Wurst <christoph@winzerhof-wurst.at>
- * @author Morris Jobke <hey@morrisjobke.de>
- *
- * @license GNU AGPL version 3 or any later version
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
- *
+ * SPDX-FileCopyrightText: 2016 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
+
 namespace OC\Support\CrashReport;
 
 use Exception;
 use OCP\AppFramework\QueryException;
-use OCP\IServerContainer;
+use OCP\Server;
 use OCP\Support\CrashReport\ICollectBreadcrumbs;
 use OCP\Support\CrashReport\IMessageReporter;
 use OCP\Support\CrashReport\IRegistry;
@@ -44,18 +27,10 @@ class Registry implements IRegistry {
 	/** @var IReporter[] */
 	private $reporters = [];
 
-	/** @var IServerContainer */
-	private $serverContainer;
-
-	public function __construct(IServerContainer $serverContainer) {
-		$this->serverContainer = $serverContainer;
-	}
-
 	/**
 	 * Register a reporter instance
-	 *
-	 * @param IReporter $reporter
 	 */
+	#[\Override]
 	public function register(IReporter $reporter): void {
 		$this->reporters[] = $reporter;
 	}
@@ -67,12 +42,9 @@ class Registry implements IRegistry {
 	/**
 	 * Delegate breadcrumb collection to all registered reporters
 	 *
-	 * @param string $message
-	 * @param string $category
-	 * @param array $context
-	 *
 	 * @since 15.0.0
 	 */
+	#[\Override]
 	public function delegateBreadcrumb(string $message, string $category, array $context = []): void {
 		$this->loadLazyProviders();
 
@@ -87,8 +59,8 @@ class Registry implements IRegistry {
 	 * Delegate crash reporting to all registered reporters
 	 *
 	 * @param Exception|Throwable $exception
-	 * @param array $context
 	 */
+	#[\Override]
 	public function delegateReport($exception, array $context = []): void {
 		$this->loadLazyProviders();
 
@@ -100,11 +72,9 @@ class Registry implements IRegistry {
 	/**
 	 * Delegate a message to all reporters that implement IMessageReporter
 	 *
-	 * @param string $message
-	 * @param array $context
-	 *
 	 * @return void
 	 */
+	#[\Override]
 	public function delegateMessage(string $message, array $context = []): void {
 		$this->loadLazyProviders();
 
@@ -119,15 +89,16 @@ class Registry implements IRegistry {
 		while (($class = array_shift($this->lazyReporters)) !== null) {
 			try {
 				/** @var IReporter $reporter */
-				$reporter = $this->serverContainer->query($class);
+				$reporter = Server::get($class);
 			} catch (QueryException $e) {
 				/*
 				 * There is a circular dependency between the logger and the registry, so
 				 * we can not inject it. Thus the static call.
 				 */
-				\OC::$server->get(LoggerInterface::class)->critical('Could not load lazy crash reporter: ' . $e->getMessage(), [
+				Server::get(LoggerInterface::class)->critical('Could not load lazy crash reporter: ' . $e->getMessage(), [
 					'exception' => $e,
 				]);
+				return;
 			}
 			/**
 			 * Try to register the loaded reporter. Theoretically it could be of a wrong
@@ -140,13 +111,14 @@ class Registry implements IRegistry {
 				 * There is a circular dependency between the logger and the registry, so
 				 * we can not inject it. Thus the static call.
 				 */
-				\OC::$server->get(LoggerInterface::class)->critical('Could not register lazy crash reporter: ' . $e->getMessage(), [
+				Server::get(LoggerInterface::class)->critical('Could not register lazy crash reporter: ' . $e->getMessage(), [
 					'exception' => $e,
 				]);
 			}
 		}
 	}
 
+	#[\Override]
 	public function hasReporters(): bool {
 		return !empty($this->lazyReporters) || !empty($this->reporters);
 	}

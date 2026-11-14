@@ -2,25 +2,8 @@
 
 declare(strict_types = 1);
 /**
- * @copyright 2022 Carl Schwan <carl@carlschwan.eu>
- *
- * @author Carl Schwan <carl@carlschwan.eu>
- *
- * @license GNU AGPL version 3 or any later version
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
- *
+ * SPDX-FileCopyrightText: 2022 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
 namespace OC\Profiler;
@@ -29,8 +12,6 @@ use OCP\DataCollector\IDataCollector;
 use OCP\Profiler\IProfile;
 
 class Profile implements \JsonSerializable, IProfile {
-	private string $token;
-
 	private ?int $time = null;
 
 	private ?string $url = null;
@@ -47,67 +28,83 @@ class Profile implements \JsonSerializable, IProfile {
 	/** @var IProfile[] */
 	private array $children = [];
 
-	public function __construct(string $token) {
-		$this->token = $token;
+	public function __construct(
+		private string $token,
+	) {
 	}
 
+	#[\Override]
 	public function getToken(): string {
 		return $this->token;
 	}
 
+	#[\Override]
 	public function setToken(string $token): void {
 		$this->token = $token;
 	}
 
+	#[\Override]
 	public function getTime(): ?int {
 		return $this->time;
 	}
 
+	#[\Override]
 	public function setTime(int $time): void {
 		$this->time = $time;
 	}
 
+	#[\Override]
 	public function getUrl(): ?string {
 		return $this->url;
 	}
 
+	#[\Override]
 	public function setUrl(string $url): void {
 		$this->url = $url;
 	}
 
+	#[\Override]
 	public function getMethod(): ?string {
 		return $this->method;
 	}
 
+	#[\Override]
 	public function setMethod(string $method): void {
 		$this->method = $method;
 	}
 
+	#[\Override]
 	public function getStatusCode(): ?int {
 		return $this->statusCode;
 	}
 
+	#[\Override]
 	public function setStatusCode(int $statusCode): void {
 		$this->statusCode = $statusCode;
 	}
 
+	#[\Override]
 	public function addCollector(IDataCollector $collector) {
 		$this->collectors[$collector->getName()] = $collector;
 	}
 
+	#[\Override]
 	public function getParent(): ?IProfile {
 		return $this->parent;
 	}
 
+	#[\Override]
 	public function setParent(?IProfile $parent): void {
 		$this->parent = $parent;
 	}
 
+	#[\Override]
 	public function getParentToken(): ?string {
 		return $this->parent ? $this->parent->getToken() : null;
 	}
 
 	/** @return IProfile[] */
+	#[\Override]
 	public function getChildren(): array {
 		return $this->children;
 	}
@@ -115,6 +112,7 @@ class Profile implements \JsonSerializable, IProfile {
 	/**
 	 * @param IProfile[] $children
 	 */
+	#[\Override]
 	public function setChildren(array $children): void {
 		$this->children = [];
 		foreach ($children as $child) {
@@ -122,6 +120,7 @@ class Profile implements \JsonSerializable, IProfile {
 		}
 	}
 
+	#[\Override]
 	public function addChild(IProfile $profile): void {
 		$this->children[] = $profile;
 		$profile->setParent($this);
@@ -130,6 +129,7 @@ class Profile implements \JsonSerializable, IProfile {
 	/**
 	 * @return IDataCollector[]
 	 */
+	#[\Override]
 	public function getCollectors(): array {
 		return $this->collectors;
 	}
@@ -137,6 +137,7 @@ class Profile implements \JsonSerializable, IProfile {
 	/**
 	 * @param IDataCollector[] $collectors
 	 */
+	#[\Override]
 	public function setCollectors(array $collectors): void {
 		$this->collectors = $collectors;
 	}
@@ -145,6 +146,7 @@ class Profile implements \JsonSerializable, IProfile {
 		return ['token', 'parent', 'children', 'collectors', 'method', 'url', 'time', 'statusCode'];
 	}
 
+	#[\Override]
 	#[\ReturnTypeWillChange]
 	public function jsonSerialize() {
 		// Everything but parent
@@ -159,6 +161,7 @@ class Profile implements \JsonSerializable, IProfile {
 		];
 	}
 
+	#[\Override]
 	public function getCollector(string $collectorName): ?IDataCollector {
 		if (!array_key_exists($collectorName, $this->collectors)) {
 			return null;

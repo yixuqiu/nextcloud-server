@@ -1,36 +1,21 @@
 /**
- * @copyright Copyright (c) 2023 John Molakvoæ <skjnldsv@protonmail.com>
- *
- * @author John Molakvoæ <skjnldsv@protonmail.com>
- * @author Ferdinand Thiessen <opensource@fthiessen.de>
- *
- * @license AGPL-3.0-or-later
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
- *
+ * SPDX-FileCopyrightText: 2023 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 import type { ContentsWithRoot, Node } from '@nextcloud/files'
-import type { FileStat, ResponseDataDetailed } from 'webdav'
+import type { ResponseDataDetailed, SearchResult } from 'webdav'
 
 import { getCurrentUser } from '@nextcloud/auth'
-import { Folder, Permission, davGetRecentSearch, davGetClient, davResultToNode, davRootPath, davRemoteURL } from '@nextcloud/files'
-import { useUserConfigStore } from '../store/userconfig.ts'
+import { Folder, Permission } from '@nextcloud/files'
+import { getRecentSearch, getRemoteURL, getRootPath, resultToNode } from '@nextcloud/files/dav'
+import { loadState } from '@nextcloud/initial-state'
 import { pinia } from '../store/index.ts'
-
-const client = davGetClient()
+import { useUserConfigStore } from '../store/userconfig.ts'
+import { logger } from '../utils/logger.ts'
+import { client } from './WebdavClient.ts'
 
 const lastTwoWeeksTimestamp = Math.round((Date.now() / 1000) - (60 * 60 * 24 * 14))
+const recentLimit = loadState<number>('files', 'recent_limit', 100)
 
 /**
  * Get recently changed nodes
@@ -39,40 +24,48 @@ const lastTwoWeeksTimestamp = Math.round((Date.now() / 1000) - (60 * 60 * 24 * 1
  * If hidden files are not shown, then also recently changed files *in* hidden directories are filtered.
  *
  * @param path Path to search for recent changes
+ * @param options Options including abort signal
+ * @param options.signal Abort signal to cancel the request
  */
-export const getContents = async (path = '/'): Promise<ContentsWithRoot> => {
+export async function getContents(path = '/', options?: { signal: AbortSignal }): Promise<ContentsWithRoot> {
 	const store = useUserConfigStore(pinia)
+
 	/**
 	 * Filter function that returns only the visible nodes - or hidden if explicitly configured
+	 *
 	 * @param node The node to check
 	 */
-	const filterHidden = (node: Node) =>
-		path !== '/' // We need to hide files from hidden directories in the root if not configured to show
+	const filterHidden = (node: Node) => path !== '/' // We need to hide files from hidden directories in the root if not configured to show
 		|| store.userConfig.show_hidden // If configured to show hidden files we can early return
 		|| !node.dirname.split('/').some((dir) => dir.startsWith('.')) // otherwise only include the file if non of the parent directories is hidden
 
-	const contentsResponse = await client.getDirectoryContents(path, {
-		details: true,
-		data: davGetRecentSearch(lastTwoWeeksTimestamp),
-		headers: {
-			// Patched in WebdavClient.ts
-			method: 'SEARCH',
-			// Somehow it's needed to get the correct response
-			'Content-Type': 'application/xml; charset=utf-8',
-		},
-		deep: true,
-	}) as ResponseDataDetailed<FileStat[]>
+	try {
+		const contentsResponse = await client.search('/', {
+			signal: options?.signal,
+			details: true,
+			data: getRecentSearch(lastTwoWeeksTimestamp, recentLimit),
+		}) as ResponseDataDetailed<SearchResult>
 
-	const contents = contentsResponse.data
+		const contents = contentsResponse.data.results
+			.map((stat) => resultToNode(stat))
+			.filter(filterHidden)
 
-	return {
-		folder: new Folder({
-			id: 0,
-			source: `${davRemoteURL}${davRootPath}`,
-			root: davRootPath,
-			owner: getCurrentUser()?.uid || null,
-			permissions: Permission.READ,
-		}),
-		contents: contents.map((r) => davResultToNode(r)).filter(filterHidden),
+		return {
+			folder: new Folder({
+				id: 0,
+				source: `${getRemoteURL()}${getRootPath()}`,
+				root: getRootPath(),
+				owner: getCurrentUser()?.uid || null,
+				permissions: Permission.READ,
+			}),
+			contents,
+		}
+	} catch (error) {
+		if (options?.signal.aborted) {
+			logger.info('Fetching recent files aborted')
+			throw new DOMException('Aborted', 'AbortError')
+		}
+		logger.error('Failed to fetch recent files', { error })
+		throw error
 	}
 }

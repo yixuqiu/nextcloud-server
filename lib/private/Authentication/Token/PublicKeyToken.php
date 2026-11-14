@@ -3,31 +3,15 @@
 declare(strict_types=1);
 
 /**
- * @copyright Copyright (c) 2016 Roeland Jago Douma <roeland@famdouma.nl>
- *
- * @author Christoph Wurst <christoph@winzerhof-wurst.at>
- * @author Daniel Kesselberg <mail@danielkesselberg.de>
- * @author Roeland Jago Douma <roeland@famdouma.nl>
- *
- * @license GNU AGPL version 3 or any later version
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
- *
+ * SPDX-FileCopyrightText: 2016 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
+
 namespace OC\Authentication\Token;
 
 use OCP\AppFramework\Db\Entity;
+use OCP\Authentication\Token\IToken;
+use OCP\DB\Types;
 
 /**
  * @method void setId(int $id)
@@ -106,22 +90,25 @@ class PublicKeyToken extends Entity implements INamedToken, IWipeableToken {
 		$this->addType('passwordHash', 'string');
 		$this->addType('name', 'string');
 		$this->addType('token', 'string');
-		$this->addType('type', 'int');
-		$this->addType('remember', 'int');
-		$this->addType('lastActivity', 'int');
-		$this->addType('lastCheck', 'int');
+		$this->addType('type', Types::INTEGER);
+		$this->addType('remember', Types::INTEGER);
+		$this->addType('lastActivity', Types::INTEGER);
+		$this->addType('lastCheck', Types::INTEGER);
 		$this->addType('scope', 'string');
-		$this->addType('expires', 'int');
+		$this->addType('expires', Types::INTEGER);
 		$this->addType('publicKey', 'string');
 		$this->addType('privateKey', 'string');
-		$this->addType('version', 'int');
-		$this->addType('passwordInvalid', 'bool');
+		$this->addType('version', Types::INTEGER);
+		$this->addType('passwordInvalid', Types::BOOLEAN);
 	}
 
+	#[\Override]
 	public function getId(): int {
+		assert(!is_string($this->id) && $this->id !== null);
 		return $this->id;
 	}
 
+	#[\Override]
 	public function getUID(): string {
 		return $this->uid;
 	}
@@ -131,6 +118,7 @@ class PublicKeyToken extends Entity implements INamedToken, IWipeableToken {
 	 *
 	 * @return string
 	 */
+	#[\Override]
 	public function getLoginName(): string {
 		return parent::getLoginName();
 	}
@@ -138,10 +126,16 @@ class PublicKeyToken extends Entity implements INamedToken, IWipeableToken {
 	/**
 	 * Get the (encrypted) login password
 	 */
+	#[\Override]
 	public function getPassword(): ?string {
-		return parent::getPassword();
+		$password = parent::getPassword();
+		if ($password === '') {
+			return null;
+		}
+		return $password;
 	}
 
+	#[\Override]
 	public function jsonSerialize(): array {
 		return [
 			'id' => $this->id,
@@ -157,6 +151,7 @@ class PublicKeyToken extends Entity implements INamedToken, IWipeableToken {
 	 *
 	 * @return int
 	 */
+	#[\Override]
 	public function getLastCheck(): int {
 		return parent::getLastCheck();
 	}
@@ -164,10 +159,12 @@ class PublicKeyToken extends Entity implements INamedToken, IWipeableToken {
 	/**
 	 * Get the timestamp of the last password check
 	 */
+	#[\Override]
 	public function setLastCheck(int $time): void {
 		parent::setLastCheck($time);
 	}
 
+	#[\Override]
 	public function getScope(): string {
 		$scope = parent::getScope();
 		if ($scope === null) {
@@ -177,16 +174,18 @@ class PublicKeyToken extends Entity implements INamedToken, IWipeableToken {
 		return $scope;
 	}
 
+	#[\Override]
 	public function getScopeAsArray(): array {
 		$scope = json_decode($this->getScope(), true);
 		if (!$scope) {
 			return [
-				'filesystem' => true
+				IToken::SCOPE_FILESYSTEM => true
 			];
 		}
 		return $scope;
 	}
 
+	#[\Override]
 	public function setScope(array|string|null $scope): void {
 		if (is_array($scope)) {
 			parent::setScope(json_encode($scope));
@@ -195,26 +194,41 @@ class PublicKeyToken extends Entity implements INamedToken, IWipeableToken {
 		}
 	}
 
+	#[\Override]
 	public function getName(): string {
 		return parent::getName();
 	}
 
+	#[\Override]
 	public function setName(string $name): void {
 		parent::setName($name);
 	}
 
+	#[\Override]
 	public function getRemember(): int {
 		return parent::getRemember();
 	}
 
+	public function getToken(): string {
+		return parent::getToken();
+	}
+
+	#[\Override]
+	public function getType(): int {
+		return $this->getter('type');
+	}
+
+	#[\Override]
 	public function setToken(string $token): void {
 		parent::setToken($token);
 	}
 
+	#[\Override]
 	public function setPassword(?string $password = null): void {
 		parent::setPassword($password);
 	}
 
+	#[\Override]
 	public function setExpires($expires): void {
 		parent::setExpires($expires);
 	}
@@ -230,6 +244,7 @@ class PublicKeyToken extends Entity implements INamedToken, IWipeableToken {
 		parent::setPasswordInvalid($invalid);
 	}
 
+	#[\Override]
 	public function wipe(): void {
 		parent::setType(IToken::WIPE_TOKEN);
 	}

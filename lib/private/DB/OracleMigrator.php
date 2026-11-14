@@ -2,33 +2,11 @@
 
 declare(strict_types=1);
 /**
- * @copyright Copyright (c) 2023, Joas Schilling <coding@schilljs.com>
- * @copyright Copyright (c) 2016, ownCloud, Inc.
- *
- * @author Christoph Wurst <christoph@winzerhof-wurst.at>
- * @author Joas Schilling <coding@schilljs.com>
- * @author Jörn Friedrich Dreyer <jfd@butonic.de>
- * @author Piotr Mrowczynski <mrow4a@yahoo.com>
- * @author Robin Appelman <robin@icewind.nl>
- * @author Roeland Jago Douma <roeland@famdouma.nl>
- * @author Thomas Müller <thomas.mueller@tmit.eu>
- * @author Victor Dubiniuk <dubiniuk@owncloud.com>
- *
- * @license AGPL-3.0
- *
- * This code is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License, version 3,
- * as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program. If not, see <http://www.gnu.org/licenses/>
- *
+ * SPDX-FileCopyrightText: 2023 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-FileCopyrightText: 2016 ownCloud, Inc.
+ * SPDX-License-Identifier: AGPL-3.0-only
  */
+
 namespace OC\DB;
 
 use Doctrine\DBAL\Exception;
@@ -41,6 +19,7 @@ class OracleMigrator extends Migrator {
 	 * @return \Doctrine\DBAL\Schema\SchemaDiff
 	 * @throws Exception
 	 */
+	#[\Override]
 	protected function getDiff(Schema $targetSchema, \Doctrine\DBAL\Connection $connection): \Doctrine\DBAL\Schema\SchemaDiff {
 		// oracle forces us to quote the identifiers
 		$quotedSchema = new Schema();
@@ -146,6 +125,7 @@ class OracleMigrator extends Migrator {
 	 * @param $statement
 	 * @return string
 	 */
+	#[\Override]
 	protected function convertStatementToScript($statement) {
 		if (str_ends_with($statement, ';')) {
 			return $statement . PHP_EOL . '/' . PHP_EOL;
@@ -156,6 +136,7 @@ class OracleMigrator extends Migrator {
 		return $script;
 	}
 
+	#[\Override]
 	protected function getFilterExpression() {
 		return '/^"' . preg_quote($this->config->getSystemValueString('dbtableprefix', 'oc_')) . '/';
 	}

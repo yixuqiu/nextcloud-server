@@ -1,52 +1,36 @@
 <?php
-/**
- * @copyright Copyright (c) 2016, ownCloud, Inc.
- *
- * @author Arthur Schiwon <blizzz@arthur-schiwon.de>
- * @author Christoph Wurst <christoph@winzerhof-wurst.at>
- * @author Joas Schilling <coding@schilljs.com>
- * @author Lukas Reschke <lukas@statuscode.ch>
- * @author Phil Davis <phil.davis@inf.org>
- * @author Robin Appelman <robin@icewind.nl>
- * @author Richard Steinmetz <richard@steinmetz.cloud>
- *
- * @license AGPL-3.0
- *
- * This code is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License, version 3,
- * as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program. If not, see <http://www.gnu.org/licenses/>
- *
- */
-require __DIR__ . '/../../vendor/autoload.php';
 
+/**
+ * SPDX-FileCopyrightText: 2016-2024 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-FileCopyrightText: 2016 ownCloud, Inc.
+ * SPDX-License-Identifier: AGPL-3.0-only
+ */
+require __DIR__ . '/autoload.php';
+
+use Behat\Hook\AfterScenario;
+use Behat\Hook\BeforeScenario;
+use Behat\Step\Given;
+use Behat\Step\Then;
+use Behat\Step\When;
 use GuzzleHttp\Client;
 use GuzzleHttp\Exception\GuzzleException;
 use Psr\Http\Message\ResponseInterface;
 
 class CalDavContext implements \Behat\Behat\Context\Context {
-	/** @var string  */
-	private $baseUrl;
 	/** @var Client */
 	private $client;
 	/** @var ResponseInterface */
 	private $response;
 	/** @var string */
 	private $responseXml = '';
+	private string $sharingModesXml = '';
 
 	/**
 	 * @param string $baseUrl
 	 */
-	public function __construct($baseUrl) {
-		$this->baseUrl = $baseUrl;
-
+	public function __construct(
+		private $baseUrl,
+	) {
 		// in case of ci deployment we take the server url from the environment
 		$testServerUrl = getenv('TEST_SERVER_URL');
 		if ($testServerUrl !== false) {
@@ -54,38 +38,56 @@ class CalDavContext implements \Behat\Behat\Context\Context {
 		}
 	}
 
-	/** @BeforeScenario */
+	#[BeforeScenario]
 	public function setUpScenario() {
 		$this->client = new Client();
 		$this->responseXml = '';
 	}
 
-	/** @AfterScenario */
+	#[AfterScenario]
 	public function afterScenario() {
-		$davUrl = $this->baseUrl. '/remote.php/dav/calendars/admin/MyCalendar';
-		try {
-			$this->client->delete(
-				$davUrl,
-				[
-					'auth' => [
-						'admin',
-						'admin',
-					],
-					'headers' => [
-						'X-NC-CalDAV-No-Trashbin' => '1',
+		foreach (['MyCalendar', 'MyCalendar2'] as $calendarName) {
+			try {
+				$this->client->delete(
+					$this->baseUrl . '/remote.php/dav/calendars/admin/' . $calendarName,
+					[
+						'auth' => ['admin', 'admin'],
+						'headers' => ['X-NC-CalDAV-No-Trashbin' => '1'],
 					]
-				]
-			);
-		} catch (\GuzzleHttp\Exception\ClientException $e) {
+				);
+			} catch (\GuzzleHttp\Exception\ClientException $e) {
+			}
+		}
+	}
+
+	#[AfterScenario('@caldav-delegation')]
+	public function afterDelegationScenario() {
+		foreach (['calendar-proxy-read', 'calendar-proxy-write'] as $proxyType) {
+			try {
+				$propPatch = new \Sabre\DAV\Xml\Request\PropPatch();
+				$propPatch->properties = ['{DAV:}group-member-set' => new \Sabre\DAV\Xml\Property\Href([])];
+				$xml = new \Sabre\Xml\Service();
+				$body = $xml->write('{DAV:}propertyupdate', $propPatch, '/');
+				$this->client->request(
+					'PROPPATCH',
+					$this->baseUrl . '/remote.php/dav/principals/users/admin/' . $proxyType,
+					[
+						'headers' => ['Content-Type' => 'application/xml; charset=UTF-8'],
+						'body' => $body,
+						'auth' => ['admin', 'admin'],
+					]
+				);
+			} catch (\GuzzleHttp\Exception\ClientException $e) {
+			}
 		}
 	}
 
 	/**
-	 * @When :user requests calendar :calendar on the endpoint :endpoint
 	 * @param string $user
 	 * @param string $calendar
 	 * @param string $endpoint
 	 */
+	#[When(':user requests calendar :calendar on the endpoint :endpoint')]
 	public function requestsCalendar($user, $calendar, $endpoint) {
 		$davUrl = $this->baseUrl . $endpoint . $calendar;
 
@@ -106,9 +108,7 @@ class CalDavContext implements \Behat\Behat\Context\Context {
 		}
 	}
 
-	/**
-	 * @When :user requests principal :principal on the endpoint :endpoint
-	 */
+	#[When(':user requests principal :principal on the endpoint :endpoint')]
 	public function requestsPrincipal(string $user, string $principal, string $endpoint): void {
 		$davUrl = $this->baseUrl . $endpoint . $principal;
 
@@ -135,9 +135,9 @@ class CalDavContext implements \Behat\Behat\Context\Context {
 	}
 
 	/**
-	 * @Then The CalDAV response should contain a property :key
 	 * @throws \Exception
 	 */
+	#[Then('The CalDAV response should contain a property :key')]
 	public function theCaldavResponseShouldContainAProperty(string $key): void {
 		/** @var \Sabre\DAV\Xml\Response\MultiStatus $multiStatus */
 		$multiStatus = $this->responseXml['value'];
@@ -164,9 +164,9 @@ class CalDavContext implements \Behat\Behat\Context\Context {
 	}
 
 	/**
-	 * @Then The CalDAV response should contain a property :key with a href value :value
 	 * @throws \Exception
 	 */
+	#[Then('The CalDAV response should contain a property :key with a href value :value')]
 	public function theCaldavResponseShouldContainAPropertyWithHrefValue(
 		string $key,
 		string $value,
@@ -195,9 +195,29 @@ class CalDavContext implements \Behat\Behat\Context\Context {
 	}
 
 	/**
-	 * @Then The CalDAV response should be multi status
 	 * @throws \Exception
 	 */
+	#[Then('The CalDAV response should contain an href :href')]
+	public function theCaldavResponseShouldContainAnHref(string $href): void {
+		/** @var \Sabre\DAV\Xml\Response\MultiStatus $multiStatus */
+		$multiStatus = $this->responseXml['value'];
+		foreach ($multiStatus->getResponses() as $response) {
+			if ($response->getHref() === $href) {
+				return;
+			}
+		}
+		throw new \Exception(
+			sprintf(
+				'Expected href %s not found in response',
+				$href,
+			)
+		);
+	}
+
+	/**
+	 * @throws \Exception
+	 */
+	#[Then('The CalDAV response should be multi status')]
 	public function theCaldavResponseShouldBeMultiStatus(): void {
 		if ($this->response->getStatusCode() !== 207) {
 			throw new \Exception(
@@ -220,10 +240,10 @@ class CalDavContext implements \Behat\Behat\Context\Context {
 	}
 
 	/**
-	 * @Then The CalDAV HTTP status code should be :code
 	 * @param int $code
 	 * @throws \Exception
 	 */
+	#[Then('The CalDAV HTTP status code should be :code')]
 	public function theCaldavHttpStatusCodeShouldBe($code) {
 		if ((int)$code !== $this->response->getStatusCode()) {
 			throw new \Exception(
@@ -244,10 +264,10 @@ class CalDavContext implements \Behat\Behat\Context\Context {
 	}
 
 	/**
-	 * @Then The exception is :message
 	 * @param string $message
 	 * @throws \Exception
 	 */
+	#[Then('The exception is :message')]
 	public function theExceptionIs($message) {
 		$result = $this->responseXml['value'][0]['value'];
 
@@ -263,10 +283,10 @@ class CalDavContext implements \Behat\Behat\Context\Context {
 	}
 
 	/**
-	 * @Then The error message is :message
 	 * @param string $message
 	 * @throws \Exception
 	 */
+	#[Then('The error message is :message')]
 	public function theErrorMessageIs($message) {
 		$result = $this->responseXml['value'][1]['value'];
 
@@ -282,12 +302,12 @@ class CalDavContext implements \Behat\Behat\Context\Context {
 	}
 
 	/**
-	 * @Given :user creates a calendar named :name
 	 * @param string $user
 	 * @param string $name
 	 */
+	#[Given(':user creates a calendar named :name')]
 	public function createsACalendarNamed($user, $name) {
-		$davUrl = $this->baseUrl . '/remote.php/dav/calendars/'.$user.'/'.$name;
+		$davUrl = $this->baseUrl . '/remote.php/dav/calendars/' . $user . '/' . $name;
 		$password = ($user === 'admin') ? 'admin' : '123456';
 
 		$this->response = $this->client->request(
@@ -304,36 +324,118 @@ class CalDavContext implements \Behat\Behat\Context\Context {
 	}
 
 	/**
-	 * @Then :user publicly shares the calendar named :name
 	 *
 	 * @param string $user
 	 * @param string $name
 	 */
+	#[Then(':user publicly shares the calendar named :name')]
 	public function publiclySharesTheCalendarNamed($user, $name) {
-		$davUrl = $this->baseUrl . '/remote.php/dav/calendars/'.$user.'/'.$name;
+		$this->sendPublishRequest($user, $name, 'publish-calendar');
+	}
+
+	#[When(':user unpublishes the calendar named :name')]
+	public function unpublishesTheCalendarNamed(string $user, string $name): void {
+		$this->sendPublishRequest($user, $name, 'unpublish-calendar');
+	}
+
+	private function sendPublishRequest(string $user, string $name, string $action): void {
+		$davUrl = $this->baseUrl . '/remote.php/dav/calendars/' . $user . '/' . $name;
+		$password = ($user === 'admin') ? 'admin' : '123456';
+
+		try {
+			$this->response = $this->client->request(
+				'POST',
+				$davUrl,
+				[
+					'body' => '<cs:' . $action . ' xmlns:cs="http://calendarserver.org/ns/"/>',
+					'auth' => [
+						$user,
+						$password,
+					],
+					'headers' => [
+						'Content-Type' => 'application/xml; charset=UTF-8',
+					],
+				]
+			);
+		} catch (\GuzzleHttp\Exception\ClientException $e) {
+			$this->response = $e->getResponse();
+		}
+	}
+
+	#[When(':user requests the sharing modes of the calendar named :name')]
+	public function requestsTheSharingModesOfTheCalendarNamed(string $user, string $name): void {
+		$davUrl = $this->baseUrl . '/remote.php/dav/calendars/' . $user . '/' . $name;
 		$password = ($user === 'admin') ? 'admin' : '123456';
 
 		$this->response = $this->client->request(
-			'POST',
+			'PROPFIND',
 			$davUrl,
 			[
-				'body' => '<cs:publish-calendar xmlns:cs="http://calendarserver.org/ns/"/>',
+				'body' => '<d:propfind xmlns:d="DAV:" xmlns:cs="http://calendarserver.org/ns/"><d:prop><cs:allowed-sharing-modes/><cs:publish-url/></d:prop></d:propfind>',
 				'auth' => [
 					$user,
 					$password,
 				],
 				'headers' => [
 					'Content-Type' => 'application/xml; charset=UTF-8',
+					'Depth' => '0',
 				],
 			]
 		);
+		$this->sharingModesXml = (string)$this->response->getBody();
 	}
 
 	/**
-	 * @Then There should be :amount calendars in the response body
-	 *
+	 * Requests the public link of a published calendar anonymously.
+	 * The link is looked up as the owner of the calendar.
+	 */
+	#[When(':user requests the public link of the calendar named :name')]
+	public function requestsThePublicLinkOfTheCalendarNamed(string $user, string $name): void {
+		$this->requestsTheSharingModesOfTheCalendarNamed($user, $name);
+		$publishUrl = $this->querySharingModes('//cs:publish-url/d:href');
+		if ($publishUrl->length !== 1) {
+			throw new \Exception('Calendar ' . $name . ' is not published');
+		}
+		$token = basename($publishUrl->item(0)->textContent);
+
+		try {
+			$this->response = $this->client->request(
+				'PROPFIND',
+				$this->baseUrl . '/remote.php/dav/public-calendars/' . $token,
+				['headers' => ['Depth' => '0']],
+			);
+		} catch (\GuzzleHttp\Exception\ClientException $e) {
+			$this->response = $e->getResponse();
+		}
+	}
+
+	#[Then('/^The calendar should (not )?be (shareable|publishable|published)$/')]
+	public function theCalendarShouldBe(string $not, string $mode): void {
+		$query = match ($mode) {
+			'shareable' => '//cs:allowed-sharing-modes/cs:can-be-shared',
+			'publishable' => '//cs:allowed-sharing-modes/cs:can-be-published',
+			'published' => '//cs:publish-url/d:href',
+		};
+		$expected = $not === '' ? 1 : 0;
+		$actual = $this->querySharingModes($query)->length;
+		if ($actual !== $expected) {
+			throw new \Exception(sprintf('Expected the calendar %sto be %s, got: %s', $not, $mode, $this->sharingModesXml));
+		}
+	}
+
+	private function querySharingModes(string $query): \DOMNodeList {
+		$document = new \DOMDocument();
+		$document->loadXML($this->sharingModesXml);
+		$xpath = new \DOMXPath($document);
+		$xpath->registerNamespace('d', 'DAV:');
+		$xpath->registerNamespace('cs', 'http://calendarserver.org/ns/');
+		return $xpath->query($query);
+	}
+
+	/**
 	 * @param string $amount
 	 */
+	#[Then('There should be :amount calendars in the response body')]
 	public function t($amount) {
 		$jsonEncoded = json_encode($this->responseXml);
 		$arrayElement = json_decode($jsonEncoded, true);
@@ -349,9 +451,7 @@ class CalDavContext implements \Behat\Behat\Context\Context {
 		}
 	}
 
-	/**
-	 * @When :user sends a create calendar request to :calendar on the endpoint :endpoint
-	 */
+	#[When(':user sends a create calendar request to :calendar on the endpoint :endpoint')]
 	public function sendsCreateCalendarRequest(string $user, string $calendar, string $endpoint) {
 		$davUrl = $this->baseUrl . $endpoint . $calendar;
 		$password = ($user === 'admin') ? 'admin' : '123456';
@@ -373,9 +473,7 @@ class CalDavContext implements \Behat\Behat\Context\Context {
 		}
 	}
 
-	/**
-	 * @Given :user updates property :key to href :value of principal :principal on the endpoint :endpoint
-	 */
+	#[Given(':user updates property :key to href :value of principal :principal on the endpoint :endpoint')]
 	public function updatesHrefPropertyOfPrincipal(
 		string $user,
 		string $key,
@@ -392,19 +490,23 @@ class CalDavContext implements \Behat\Behat\Context\Context {
 		$xml = new \Sabre\Xml\Service();
 		$body = $xml->write('{DAV:}propertyupdate', $propPatch, '/');
 
-		$this->response = $this->client->request(
-			'PROPPATCH',
-			$davUrl,
-			[
-				'headers' => [
-					'Content-Type' => 'application/xml; charset=UTF-8',
-				],
-				'body' => $body,
-				'auth' => [
-					$user,
-					$password,
-				],
-			]
-		);
+		try {
+			$this->response = $this->client->request(
+				'PROPPATCH',
+				$davUrl,
+				[
+					'headers' => [
+						'Content-Type' => 'application/xml; charset=UTF-8',
+					],
+					'body' => $body,
+					'auth' => [
+						$user,
+						$password,
+					],
+				]
+			);
+		} catch (\GuzzleHttp\Exception\ClientException $e) {
+			$this->response = $e->getResponse();
+		}
 	}
 }

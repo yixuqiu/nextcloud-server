@@ -3,25 +3,8 @@
 declare(strict_types=1);
 
 /**
- * @copyright Copyright (c) 2020 Joas Schilling <coding@schilljs.com>
- *
- * @author Côme Chilliet <come.chilliet@nextcloud.com>
- *
- * @license GNU AGPL version 3 or any later version
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
- *
+ * SPDX-FileCopyrightText: 2020 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
 namespace OCA\User_LDAP\Migration;
@@ -39,22 +22,20 @@ use Psr\Log\LoggerInterface;
 
 class Version1130Date20211102154716 extends SimpleMigrationStep {
 
-	/** @var IDBConnection */
-	private $dbc;
-	/** @var LoggerInterface */
-	private $logger;
 	/** @var string[] */
 	private $hashColumnAddedToTables = [];
 
-	public function __construct(IDBConnection $dbc, LoggerInterface $logger) {
-		$this->dbc = $dbc;
-		$this->logger = $logger;
+	public function __construct(
+		private IDBConnection $dbc,
+		private LoggerInterface $logger,
+	) {
 	}
 
 	public function getName() {
 		return 'Adjust LDAP user and group ldap_dn column lengths and add ldap_dn_hash columns';
 	}
 
+	#[\Override]
 	public function preSchemaChange(IOutput $output, \Closure $schemaClosure, array $options) {
 		foreach (['ldap_user_mapping', 'ldap_group_mapping'] as $tableName) {
 			$this->processDuplicateUUIDs($tableName);
@@ -78,6 +59,7 @@ class Version1130Date20211102154716 extends SimpleMigrationStep {
 	 * @param array $options
 	 * @return null|ISchemaWrapper
 	 */
+	#[\Override]
 	public function changeSchema(IOutput $output, Closure $schemaClosure, array $options): ?ISchemaWrapper {
 		/** @var ISchemaWrapper $schema */
 		$schema = $schemaClosure();
@@ -147,6 +129,7 @@ class Version1130Date20211102154716 extends SimpleMigrationStep {
 	 * @param Closure $schemaClosure The `\Closure` returns a `ISchemaWrapper`
 	 * @param array $options
 	 */
+	#[\Override]
 	public function postSchemaChange(IOutput $output, Closure $schemaClosure, array $options) {
 		$this->handleDNHashes('ldap_group_mapping');
 		$this->handleDNHashes('ldap_user_mapping');
@@ -157,7 +140,7 @@ class Version1130Date20211102154716 extends SimpleMigrationStep {
 		$update = $this->getUpdateQuery($table);
 
 		$result = $select->executeQuery();
-		while ($row = $result->fetch()) {
+		while ($row = $result->fetchAssociative()) {
 			$dnHash = hash('sha256', $row['ldap_dn'], false);
 			$update->setParameter('name', $row['owncloud_name']);
 			$update->setParameter('dn_hash', $dnHash);

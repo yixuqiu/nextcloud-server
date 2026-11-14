@@ -1,82 +1,51 @@
 <?php
+
+declare(strict_types=1);
 /**
- * @copyright Copyright (c) 2016, ownCloud, Inc.
- *
- * @author Bjoern Schiessle <bjoern@schiessle.org>
- * @author Joas Schilling <coding@schilljs.com>
- * @author Lukas Reschke <lukas@statuscode.ch>
- * @author Morris Jobke <hey@morrisjobke.de>
- * @author Roeland Jago Douma <roeland@famdouma.nl>
- * @author Thomas Müller <thomas.mueller@tmit.eu>
- *
- * @license AGPL-3.0
- *
- * This code is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License, version 3,
- * as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program. If not, see <http://www.gnu.org/licenses/>
- *
+ * SPDX-FileCopyrightText: 2016-2024 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-FileCopyrightText: 2016 ownCloud, Inc.
+ * SPDX-License-Identifier: AGPL-3.0-only
  */
+
 namespace OCA\DAV\Tests\unit\Connector;
 
+use OCA\DAV\Connector\LegacyPublicAuth;
 use OCP\IRequest;
 use OCP\ISession;
+use OCP\IUserSession;
 use OCP\Security\Bruteforce\IThrottler;
 use OCP\Share\Exceptions\ShareNotFound;
 use OCP\Share\IManager;
 use OCP\Share\IShare;
+use PHPUnit\Framework\Attributes\Group;
+use PHPUnit\Framework\MockObject\MockObject;
+use Test\TestCase;
 
-/**
- * Class LegacyPublicAuthTest
- *
- * @group DB
- *
- * @package OCA\DAV\Tests\unit\Connector
- */
-class LegacyPublicAuthTest extends \Test\TestCase {
-
-	/** @var ISession|\PHPUnit\Framework\MockObject\MockObject */
-	private $session;
-	/** @var IRequest|\PHPUnit\Framework\MockObject\MockObject */
-	private $request;
-	/** @var IManager|\PHPUnit\Framework\MockObject\MockObject */
-	private $shareManager;
-	/** @var \OCA\DAV\Connector\LegacyPublicAuth */
-	private $auth;
-	/** @var IThrottler|\PHPUnit\Framework\MockObject\MockObject */
-	private $throttler;
-
-	/** @var string */
-	private $oldUser;
+#[Group(name: 'DB')]
+class LegacyPublicAuthTest extends TestCase {
+	private ISession&MockObject $session;
+	private IRequest&MockObject $request;
+	private IManager&MockObject $shareManager;
+	private IThrottler&MockObject $throttler;
+	private IUserSession&MockObject $userSession;
+	private LegacyPublicAuth $auth;
+	private string|false $oldUser;
 
 	protected function setUp(): void {
 		parent::setUp();
 
-		$this->session = $this->getMockBuilder(ISession::class)
-			->disableOriginalConstructor()
-			->getMock();
-		$this->request = $this->getMockBuilder(IRequest::class)
-			->disableOriginalConstructor()
-			->getMock();
-		$this->shareManager = $this->getMockBuilder(IManager::class)
-			->disableOriginalConstructor()
-			->getMock();
-		$this->throttler = $this->getMockBuilder(IThrottler::class)
-			->disableOriginalConstructor()
-			->getMock();
+		$this->session = $this->createMock(ISession::class);
+		$this->request = $this->createMock(IRequest::class);
+		$this->shareManager = $this->createMock(IManager::class);
+		$this->throttler = $this->createMock(IThrottler::class);
+		$this->userSession = $this->createMock(IUserSession::class);
 
-		$this->auth = new \OCA\DAV\Connector\LegacyPublicAuth(
+		$this->auth = new LegacyPublicAuth(
 			$this->request,
 			$this->shareManager,
 			$this->session,
-			$this->throttler
+			$this->throttler,
+			$this->userSession,
 		);
 
 		// Store current user
@@ -87,8 +56,10 @@ class LegacyPublicAuthTest extends \Test\TestCase {
 		\OC_User::setIncognitoMode(false);
 
 		// Set old user
-		\OC_User::setUserId($this->oldUser);
-		\OC_Util::setupFS($this->oldUser);
+		\OC_User::setUserId($this->oldUser ?: null);
+		if ($this->oldUser !== false) {
+			\OC_Util::setupFS($this->oldUser);
+		}
 
 		parent::tearDown();
 	}
@@ -104,10 +75,9 @@ class LegacyPublicAuthTest extends \Test\TestCase {
 	}
 
 	public function testShareNoPassword(): void {
-		$share = $this->getMockBuilder(IShare::class)
-			->disableOriginalConstructor()
-			->getMock();
+		$share = $this->createMock(IShare::class);
 		$share->method('getPassword')->willReturn(null);
+		$share->method('isPasswordProtected')->willReturn(false);
 
 		$this->shareManager->expects($this->once())
 			->method('getShareByToken')
@@ -119,10 +89,10 @@ class LegacyPublicAuthTest extends \Test\TestCase {
 	}
 
 	public function testSharePasswordFancyShareType(): void {
-		$share = $this->getMockBuilder(IShare::class)
-			->disableOriginalConstructor()
-			->getMock();
+		$share = $this->createMock(IShare::class);
 		$share->method('getPassword')->willReturn('password');
+		$share->method('isPasswordProtected')->willReturn(true);
+		$share->method('isPasswordHashed')->willReturn(true);
 		$share->method('getShareType')->willReturn(42);
 
 		$this->shareManager->expects($this->once())
@@ -134,12 +104,11 @@ class LegacyPublicAuthTest extends \Test\TestCase {
 		$this->assertFalse($result);
 	}
 
-
 	public function testSharePasswordRemote(): void {
-		$share = $this->getMockBuilder(IShare::class)
-			->disableOriginalConstructor()
-			->getMock();
+		$share = $this->createMock(IShare::class);
 		$share->method('getPassword')->willReturn('password');
+		$share->method('isPasswordProtected')->willReturn(true);
+		$share->method('isPasswordHashed')->willReturn(true);
 		$share->method('getShareType')->willReturn(IShare::TYPE_REMOTE);
 
 		$this->shareManager->expects($this->once())
@@ -152,11 +121,12 @@ class LegacyPublicAuthTest extends \Test\TestCase {
 	}
 
 	public function testSharePasswordLinkValidPassword(): void {
-		$share = $this->getMockBuilder(IShare::class)
-			->disableOriginalConstructor()
-			->getMock();
+		$share = $this->createMock(IShare::class);
 		$share->method('getPassword')->willReturn('password');
+		$share->method('isPasswordProtected')->willReturn(true);
+		$share->method('isPasswordHashed')->willReturn(true);
 		$share->method('getShareType')->willReturn(IShare::TYPE_LINK);
+		$share->method('getToken')->willReturn('GX9HSGQrGE');
 
 		$this->shareManager->expects($this->once())
 			->method('getShareByToken')
@@ -168,16 +138,42 @@ class LegacyPublicAuthTest extends \Test\TestCase {
 				$this->equalTo('password')
 			)->willReturn(true);
 
+		$this->session->expects($this->once())
+			->method('set')
+			->with('public_link_authenticated_frontend', '{"GX9HSGQrGE":"password"}');
+
+		$result = $this->invokePrivate($this->auth, 'validateUserPass', ['username', 'password']);
+
+		$this->assertTrue($result);
+	}
+
+	public function testSharePasswordNotHashedNotStoredInSession(): void {
+		$share = $this->createMock(IShare::class);
+		$share->method('getPassword')->willReturn('password');
+		$share->method('isPasswordProtected')->willReturn(true);
+		$share->method('isPasswordHashed')->willReturn(false);
+		$share->method('getShareType')->willReturn(IShare::TYPE_LINK);
+		$share->method('getToken')->willReturn('GX9HSGQrGE');
+
+		$this->shareManager->expects($this->once())
+			->method('getShareByToken')
+			->willReturn($share);
+
+		$this->shareManager->method('checkPassword')->willReturn(true);
+
+		$this->session->expects($this->never())->method('set');
+
 		$result = $this->invokePrivate($this->auth, 'validateUserPass', ['username', 'password']);
 
 		$this->assertTrue($result);
 	}
 
 	public function testSharePasswordMailValidPassword(): void {
-		$share = $this->getMockBuilder(IShare::class)
-			->disableOriginalConstructor()
-			->getMock();
+		$share = $this->createMock(IShare::class);
+		$share->method('getToken')->willReturn('GX9HSGQrGE');
 		$share->method('getPassword')->willReturn('password');
+		$share->method('isPasswordProtected')->willReturn(true);
+		$share->method('isPasswordHashed')->willReturn(true);
 		$share->method('getShareType')->willReturn(IShare::TYPE_EMAIL);
 
 		$this->shareManager->expects($this->once())
@@ -196,12 +192,12 @@ class LegacyPublicAuthTest extends \Test\TestCase {
 	}
 
 	public function testInvalidSharePasswordLinkValidSession(): void {
-		$share = $this->getMockBuilder(IShare::class)
-			->disableOriginalConstructor()
-			->getMock();
+		$share = $this->createMock(IShare::class);
 		$share->method('getPassword')->willReturn('password');
+		$share->method('isPasswordProtected')->willReturn(true);
+		$share->method('isPasswordHashed')->willReturn(true);
 		$share->method('getShareType')->willReturn(IShare::TYPE_LINK);
-		$share->method('getId')->willReturn('42');
+		$share->method('getToken')->willReturn('GX9HSGQrGE');
 
 		$this->shareManager->expects($this->once())
 			->method('getShareByToken')
@@ -213,21 +209,45 @@ class LegacyPublicAuthTest extends \Test\TestCase {
 				$this->equalTo('password')
 			)->willReturn(false);
 
-		$this->session->method('exists')->with('public_link_authenticated')->willReturn(true);
-		$this->session->method('get')->with('public_link_authenticated')->willReturn('42');
+		$this->session->method('get')->with('public_link_authenticated_frontend')->willReturn('{"GX9HSGQrGE":"password"}');
 
 		$result = $this->invokePrivate($this->auth, 'validateUserPass', ['username', 'password']);
 
 		$this->assertTrue($result);
 	}
 
-	public function testSharePasswordLinkInvalidSession(): void {
-		$share = $this->getMockBuilder(IShare::class)
-			->disableOriginalConstructor()
-			->getMock();
-		$share->method('getPassword')->willReturn('password');
+	public function testInvalidSharePasswordLinkSessionWithChangedPassword(): void {
+		$share = $this->createMock(IShare::class);
+		$share->method('getPassword')->willReturn('new-password');
+		$share->method('isPasswordProtected')->willReturn(true);
+		$share->method('isPasswordHashed')->willReturn(true);
 		$share->method('getShareType')->willReturn(IShare::TYPE_LINK);
-		$share->method('getId')->willReturn('42');
+		$share->method('getToken')->willReturn('GX9HSGQrGE');
+
+		$this->shareManager->expects($this->once())
+			->method('getShareByToken')
+			->willReturn($share);
+
+		$this->shareManager->method('checkPassword')
+			->with(
+				$this->equalTo($share),
+				$this->equalTo('old-password')
+			)->willReturn(false);
+
+		$this->session->method('get')->with('public_link_authenticated_frontend')->willReturn('{"GX9HSGQrGE":"old-password"}');
+
+		$result = $this->invokePrivate($this->auth, 'validateUserPass', ['username', 'old-password']);
+
+		$this->assertFalse($result);
+	}
+
+	public function testSharePasswordLinkInvalidSession(): void {
+		$share = $this->createMock(IShare::class);
+		$share->method('getPassword')->willReturn('password');
+		$share->method('isPasswordProtected')->willReturn(true);
+		$share->method('isPasswordHashed')->willReturn(true);
+		$share->method('getShareType')->willReturn(IShare::TYPE_LINK);
+		$share->method('getToken')->willReturn('GX9HSGQrGE');
 
 		$this->shareManager->expects($this->once())
 			->method('getShareByToken')
@@ -239,22 +259,20 @@ class LegacyPublicAuthTest extends \Test\TestCase {
 				$this->equalTo('password')
 			)->willReturn(false);
 
-		$this->session->method('exists')->with('public_link_authenticated')->willReturn(true);
-		$this->session->method('get')->with('public_link_authenticated')->willReturn('43');
+		$this->session->method('get')->with('public_link_authenticated_frontend')->willReturn('{"other-token":"password"}');
 
 		$result = $this->invokePrivate($this->auth, 'validateUserPass', ['username', 'password']);
 
 		$this->assertFalse($result);
 	}
 
-
 	public function testSharePasswordMailInvalidSession(): void {
-		$share = $this->getMockBuilder(IShare::class)
-			->disableOriginalConstructor()
-			->getMock();
+		$share = $this->createMock(IShare::class);
 		$share->method('getPassword')->willReturn('password');
+		$share->method('isPasswordProtected')->willReturn(true);
+		$share->method('isPasswordHashed')->willReturn(true);
 		$share->method('getShareType')->willReturn(IShare::TYPE_EMAIL);
-		$share->method('getId')->willReturn('42');
+		$share->method('getToken')->willReturn('GX9HSGQrGE');
 
 		$this->shareManager->expects($this->once())
 			->method('getShareByToken')
@@ -266,8 +284,7 @@ class LegacyPublicAuthTest extends \Test\TestCase {
 				$this->equalTo('password')
 			)->willReturn(false);
 
-		$this->session->method('exists')->with('public_link_authenticated')->willReturn(true);
-		$this->session->method('get')->with('public_link_authenticated')->willReturn('43');
+		$this->session->method('get')->with('public_link_authenticated_frontend')->willReturn('{"other-token":"password"}');
 
 		$result = $this->invokePrivate($this->auth, 'validateUserPass', ['username', 'password']);
 

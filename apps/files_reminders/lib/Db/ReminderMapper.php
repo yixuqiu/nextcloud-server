@@ -3,25 +3,8 @@
 declare(strict_types=1);
 
 /**
- * @copyright 2023 Christopher Ng <chrng8@gmail.com>
- *
- * @author Christopher Ng <chrng8@gmail.com>
- *
- * @license GNU AGPL version 3 or any later version
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
- *
+ * SPDX-FileCopyrightText: 2023-2026 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
 namespace OCA\FilesReminders\Db;
@@ -29,7 +12,9 @@ namespace OCA\FilesReminders\Db;
 use DateTime;
 use OCP\AppFramework\Db\DoesNotExistException;
 use OCP\AppFramework\Db\QBMapper;
+use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\DB\QueryBuilder\IQueryBuilder;
+use OCP\Files\Folder;
 use OCP\Files\Node;
 use OCP\Files\NotFoundException;
 use OCP\IDBConnection;
@@ -41,12 +26,11 @@ use OCP\IUser;
 class ReminderMapper extends QBMapper {
 	public const TABLE_NAME = 'files_reminders';
 
-	public function __construct(IDBConnection $db) {
-		parent::__construct(
-			$db,
-			static::TABLE_NAME,
-			Reminder::class,
-		);
+	public function __construct(
+		IDBConnection $db,
+		private ITimeFactory $timeFactory,
+	) {
+		parent::__construct($db, self::TABLE_NAME, Reminder::class);
 	}
 
 	public function markNotified(Reminder $reminder): Reminder {
@@ -54,16 +38,6 @@ class ReminderMapper extends QBMapper {
 		$reminderUpdate->setId($reminder->getId());
 		$reminderUpdate->setNotified(true);
 		return $this->update($reminderUpdate);
-	}
-
-	public function find(int $id): Reminder {
-		$qb = $this->db->getQueryBuilder();
-
-		$qb->select('id', 'user_id', 'file_id', 'due_date', 'updated_at', 'created_at', 'notified')
-			->from($this->getTableName())
-			->where($qb->expr()->eq('id', $qb->createNamedParameter($id, IQueryBuilder::PARAM_INT)));
-
-		return $this->findEntity($qb);
 	}
 
 	/**
@@ -134,9 +108,18 @@ class ReminderMapper extends QBMapper {
 	public function findOverdue() {
 		$qb = $this->db->getQueryBuilder();
 
+		$now = $this->timeFactory->getDateTime();
+		$now->setTimezone(new \DateTimeZone('UTC'));
+
 		$qb->select('id', 'user_id', 'file_id', 'due_date', 'updated_at', 'created_at', 'notified')
 			->from($this->getTableName())
-			->where($qb->expr()->lt('due_date', $qb->createFunction('NOW()')))
+			->where(
+				$qb->expr()->lt(
+					'due_date',
+					$qb->createNamedParameter($now, IQueryBuilder::PARAM_DATETIME_MUTABLE),
+					IQueryBuilder::PARAM_DATETIME_MUTABLE,
+				)
+			)
 			->andWhere($qb->expr()->eq('notified', $qb->createNamedParameter(false, IQueryBuilder::PARAM_BOOL)))
 			->orderBy('due_date', 'ASC');
 
@@ -152,9 +135,25 @@ class ReminderMapper extends QBMapper {
 		$qb->select('id', 'user_id', 'file_id', 'due_date', 'updated_at', 'created_at', 'notified')
 			->from($this->getTableName())
 			->where($qb->expr()->eq('notified', $qb->createNamedParameter(true, IQueryBuilder::PARAM_BOOL)))
-			->andWhere($qb->expr()->lt('due_date', $qb->createNamedParameter($buffer, IQueryBuilder::PARAM_DATE)))
+			->andWhere($qb->expr()->lt('due_date', $qb->createNamedParameter($buffer, IQueryBuilder::PARAM_DATETIME_MUTABLE)))
 			->orderBy('due_date', 'ASC')
 			->setMaxResults($limit);
+
+		return $this->findEntities($qb);
+	}
+
+	/**
+	 * @return Reminder[]
+	 */
+	public function findAllInFolder(IUser $user, Folder $folder) {
+		$qb = $this->db->getQueryBuilder();
+
+		$qb->select('r.id', 'r.user_id', 'r.file_id', 'r.due_date', 'r.updated_at', 'r.created_at', 'r.notified')
+			->from($this->getTableName(), 'r')
+			->innerJoin('r', 'filecache', 'f', $qb->expr()->eq('r.file_id', 'f.fileid'))
+			->where($qb->expr()->eq('r.user_id', $qb->createNamedParameter($user->getUID(), IQueryBuilder::PARAM_STR)))
+			->andWhere($qb->expr()->eq('f.parent', $qb->createNamedParameter($folder->getId(), IQueryBuilder::PARAM_INT)))
+			->orderBy('r.due_date', 'ASC');
 
 		return $this->findEntities($qb);
 	}

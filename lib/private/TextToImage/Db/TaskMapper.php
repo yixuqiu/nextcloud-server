@@ -3,24 +3,8 @@
 declare(strict_types=1);
 
 /**
- * @copyright Copyright (c) 2023 Marcel Klehr <mklehr@gmx.net>
- *
- * @author Marcel Klehr <mklehr@gmx.net>
- *
- * @license GNU AGPL version 3 or any later version
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
+ * SPDX-FileCopyrightText: 2023 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
 namespace OC\TextToImage\Db;
@@ -54,7 +38,7 @@ class TaskMapper extends QBMapper {
 	 */
 	public function find(int $id): Task {
 		$qb = $this->db->getQueryBuilder();
-		$qb->select(Task::$columns)
+		$qb->select(Task::COLUMNS)
 			->from($this->tableName)
 			->where($qb->expr()->eq('id', $qb->createPositionalParameter($id)));
 		return $this->findEntity($qb);
@@ -70,7 +54,7 @@ class TaskMapper extends QBMapper {
 	 */
 	public function findByIdAndUser(int $id, ?string $userId): Task {
 		$qb = $this->db->getQueryBuilder();
-		$qb->select(Task::$columns)
+		$qb->select(Task::COLUMNS)
 			->from($this->tableName)
 			->where($qb->expr()->eq('id', $qb->createPositionalParameter($id)));
 		if ($userId === null) {
@@ -90,7 +74,7 @@ class TaskMapper extends QBMapper {
 	 */
 	public function findUserTasksByApp(?string $userId, string $appId, ?string $identifier = null): array {
 		$qb = $this->db->getQueryBuilder();
-		$qb->select(Task::$columns)
+		$qb->select(Task::COLUMNS)
 			->from($this->tableName)
 			->where($qb->expr()->eq('user_id', $qb->createPositionalParameter($userId)))
 			->andWhere($qb->expr()->eq('app_id', $qb->createPositionalParameter($appId)));
@@ -107,19 +91,20 @@ class TaskMapper extends QBMapper {
 	 */
 	public function deleteOlderThan(int $timeout): array {
 		$datetime = $this->timeFactory->getDateTime();
-		$datetime->sub(new \DateInterval('PT'.$timeout.'S'));
+		$datetime->sub(new \DateInterval('PT' . $timeout . 'S'));
 		$qb = $this->db->getQueryBuilder();
 		$qb->select('*')
 			->from($this->tableName)
-			->where($qb->expr()->lt('last_updated', $qb->createPositionalParameter($datetime, IQueryBuilder::PARAM_DATE)));
+			->where($qb->expr()->lt('last_updated', $qb->createPositionalParameter($datetime, IQueryBuilder::PARAM_DATETIME_MUTABLE)));
 		$deletedTasks = $this->findEntities($qb);
 		$qb = $this->db->getQueryBuilder();
 		$qb->delete($this->tableName)
-			->where($qb->expr()->lt('last_updated', $qb->createPositionalParameter($datetime, IQueryBuilder::PARAM_DATE)));
+			->where($qb->expr()->lt('last_updated', $qb->createPositionalParameter($datetime, IQueryBuilder::PARAM_DATETIME_MUTABLE)));
 		$qb->executeStatement();
 		return $deletedTasks;
 	}
 
+	#[\Override]
 	public function update(Entity $entity): Entity {
 		$entity->setLastUpdated($this->timeFactory->getDateTime());
 		return parent::update($entity);

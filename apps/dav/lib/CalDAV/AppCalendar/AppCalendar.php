@@ -3,25 +3,8 @@
 declare(strict_types=1);
 
 /**
- * @copyright 2023 Ferdinand Thiessen <opensource@fthiessen.de>
- *
- * @author Ferdinand Thiessen <opensource@fthiessen.de>
- *
- * @license AGPL-3.0-or-later
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
- *
+ * SPDX-FileCopyrightText: 2023 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
 namespace OCA\DAV\CalDAV\AppCalendar;
@@ -41,12 +24,14 @@ use Sabre\VObject\Component\VCalendar;
 use Sabre\VObject\Reader;
 
 class AppCalendar extends ExternalCalendar {
-	protected string $principal;
 	protected ICalendar $calendar;
 
-	public function __construct(string $appId, ICalendar $calendar, string $principal) {
+	public function __construct(
+		string $appId,
+		ICalendar $calendar,
+		protected string $principal,
+	) {
 		parent::__construct($appId, $calendar->getUri());
-		$this->principal = $principal;
 		$this->calendar = $calendar;
 	}
 
@@ -62,14 +47,17 @@ class AppCalendar extends ExternalCalendar {
 		return Constants::PERMISSION_READ;
 	}
 
+	#[\Override]
 	public function getOwner(): ?string {
 		return $this->principal;
 	}
 
+	#[\Override]
 	public function getGroup(): ?string {
 		return null;
 	}
 
+	#[\Override]
 	public function getACL(): array {
 		$acl = [
 			[
@@ -93,25 +81,30 @@ class AppCalendar extends ExternalCalendar {
 		return $acl;
 	}
 
+	#[\Override]
 	public function setACL(array $acl): void {
 		throw new Forbidden('Setting ACL is not supported on this node');
 	}
 
+	#[\Override]
 	public function getSupportedPrivilegeSet(): ?array {
 		// Use the default one
 		return null;
 	}
 
+	#[\Override]
 	public function getLastModified(): ?int {
 		// unknown
 		return null;
 	}
 
+	#[\Override]
 	public function delete(): void {
 		// No method for deleting a calendar in OCP\Calendar\ICalendar
 		throw new Forbidden('Deleting an entry is not implemented');
 	}
 
+	#[\Override]
 	public function createFile($name, $data = null) {
 		if ($this->calendar instanceof ICreateFromString) {
 			if (is_resource($data)) {
@@ -124,6 +117,7 @@ class AppCalendar extends ExternalCalendar {
 		}
 	}
 
+	#[\Override]
 	public function getProperties($properties) {
 		return [
 			'{DAV:}displayname' => $this->calendar->getDisplayName() ?: $this->calendar->getKey(),
@@ -132,6 +126,7 @@ class AppCalendar extends ExternalCalendar {
 		];
 	}
 
+	#[\Override]
 	public function calendarQuery(array $filters) {
 		$result = [];
 		$objects = $this->getChildren();
@@ -158,6 +153,7 @@ class AppCalendar extends ExternalCalendar {
 		return $result;
 	}
 
+	#[\Override]
 	public function childExists($name): bool {
 		try {
 			$this->getChild($name);
@@ -167,6 +163,7 @@ class AppCalendar extends ExternalCalendar {
 		}
 	}
 
+	#[\Override]
 	public function getChild($name) {
 		// Try to get calendar by filename
 		$children = $this->calendar->search($name, ['X-FILENAME']);
@@ -186,6 +183,7 @@ class AppCalendar extends ExternalCalendar {
 	/**
 	 * @return ICalendarObject[]
 	 */
+	#[\Override]
 	public function getChildren(): array {
 		$objects = $this->calendar->search('');
 		// We need to group by UID (actually by filename but we do not have that information)
@@ -203,6 +201,7 @@ class AppCalendar extends ExternalCalendar {
 		}, $result);
 	}
 
+	#[\Override]
 	public function propPatch(PropPatch $propPatch): void {
 		// no setDisplayColor or setDisplayName in \OCP\Calendar\ICalendar
 	}

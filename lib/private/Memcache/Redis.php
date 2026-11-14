@@ -1,35 +1,16 @@
 <?php
+
 /**
- * @copyright Copyright (c) 2016, ownCloud, Inc.
- *
- * @author Arthur Schiwon <blizzz@arthur-schiwon.de>
- * @author Christoph Wurst <christoph@winzerhof-wurst.at>
- * @author Joas Schilling <coding@schilljs.com>
- * @author Jörn Friedrich Dreyer <jfd@butonic.de>
- * @author Morris Jobke <hey@morrisjobke.de>
- * @author Robin Appelman <robin@icewind.nl>
- * @author Robin McCorkell <robin@mccorkell.me.uk>
- * @author Roeland Jago Douma <roeland@famdouma.nl>
- * @author Stefan Weil <sw@weilnetz.de>
- *
- * @license AGPL-3.0
- *
- * This code is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License, version 3,
- * as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program. If not, see <http://www.gnu.org/licenses/>
- *
+ * SPDX-FileCopyrightText: 2016-2024 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-FileCopyrightText: 2016 ownCloud, Inc.
+ * SPDX-License-Identifier: AGPL-3.0-only
  */
+
 namespace OC\Memcache;
 
+use OC\RedisFactory;
 use OCP\IMemcacheTTL;
+use OCP\Server;
 
 class Redis extends Cache implements IMemcacheTTL {
 	/** name => [script, sha1] */
@@ -46,35 +27,38 @@ class Redis extends Cache implements IMemcacheTTL {
 			'if redis.call("get", KEYS[1]) == ARGV[1] then return redis.call("del", KEYS[1]) else return 0 end',
 			'cf0e94b2e9ffc7e04395cf88f7583fc309985910',
 		],
+		'ncad' => [
+			'if redis.call("get", KEYS[1]) ~= ARGV[1] then return redis.call("del", KEYS[1]) else return 0 end',
+			'75526f8048b13ce94a41b58eee59c664b4990ab2',
+		],
 		'caSetTtl' => [
 			'if redis.call("get", KEYS[1]) == ARGV[1] then redis.call("expire", KEYS[1], ARGV[2]) return 1 else return 0 end',
 			'fa4acbc946d23ef41d7d3910880b60e6e4972d72',
 		],
 	];
 
-	private const DEFAULT_TTL = 24 * 60 * 60; // 1 day
-	private const MAX_TTL = 30 * 24 * 60 * 60; // 1 month
+	private const int MAX_TTL = 30 * 24 * 60 * 60; // 1 month
 
-	/**
-	 * @var \Redis|\RedisCluster $cache
-	 */
-	private static $cache = null;
+	/** Number of keys to request per SCAN iteration in {@see self::clear()} (only a hint to Redis) */
+	private const int SCAN_COUNT = 1000;
+
+	private \Redis|\RedisCluster|null $cache = null;
 
 	public function __construct($prefix = '', string $logFile = '') {
 		parent::__construct($prefix);
 	}
 
 	/**
-	 * @return \Redis|\RedisCluster|null
 	 * @throws \Exception
 	 */
-	public function getCache() {
-		if (is_null(self::$cache)) {
-			self::$cache = \OC::$server->get('RedisFactory')->getInstance();
+	public function getCache(): \Redis|\RedisCluster {
+		if ($this->cache === null) {
+			$this->cache = Server::get(RedisFactory::class)->getInstance();
 		}
-		return self::$cache;
+		return $this->cache;
 	}
 
+	#[\Override]
 	public function get($key) {
 		$result = $this->getCache()->get($this->getPrefix() . $key);
 		if ($result === false) {
@@ -84,6 +68,7 @@ class Redis extends Cache implements IMemcacheTTL {
 		return self::decodeValue($result);
 	}
 
+	#[\Override]
 	public function set($key, $value, $ttl = 0) {
 		$value = self::encodeValue($value);
 		if ($ttl === 0) {
@@ -94,10 +79,12 @@ class Redis extends Cache implements IMemcacheTTL {
 		return $this->getCache()->setex($this->getPrefix() . $key, $ttl, $value);
 	}
 
+	#[\Override]
 	public function hasKey($key) {
 		return (bool)$this->getCache()->exists($this->getPrefix() . $key);
 	}
 
+	#[\Override]
 	public function remove($key) {
 		if ($this->getCache()->unlink($this->getPrefix() . $key)) {
 			return true;
@@ -106,13 +93,47 @@ class Redis extends Cache implements IMemcacheTTL {
 		}
 	}
 
+	#[\Override]
 	public function clear($prefix = '') {
-		// TODO: this is slow and would fail with Redis cluster
-		$prefix = $this->getPrefix() . $prefix . '*';
-		$keys = $this->getCache()->keys($prefix);
-		$deleted = $this->getCache()->del($keys);
+		$pattern = $this->getPrefix() . $prefix . '*';
+		$cache = $this->getCache();
 
-		return (is_array($keys) && (count($keys) === $deleted));
+		// Iterate with SCAN and remove with UNLINK rather than KEYS + DEL:
+		// KEYS walks the whole keyspace and blocks the server, while a
+		// multi-key DEL/UNLINK is not cluster-safe (keys spanning hash slots
+		// raise a CROSSSLOT error). SCAN is non-blocking and UNLINK reclaims
+		// memory in the background.
+		if ($cache instanceof \RedisCluster) {
+			// On a cluster SCAN must be run against each master node, and keys
+			// are unlinked one at a time so each command stays within a slot.
+			foreach ($cache->_masters() as $master) {
+				$iterator = null;
+				do {
+					/** @psalm-suppress NullArgument, PossiblyNullArgument the SCAN cursor must start as null (the phpredis stub types it as int) */
+					$keys = $cache->scan($iterator, $master, $pattern, self::SCAN_COUNT);
+					if ($keys === false) {
+						break;
+					}
+					foreach ($keys as $key) {
+						$cache->unlink($key);
+					}
+				} while ($iterator > 0);
+			}
+		} else {
+			$iterator = null;
+			do {
+				/** @psalm-suppress NullArgument, PossiblyNullArgument the SCAN cursor must start as null (the phpredis stub types it as int) */
+				$keys = $cache->scan($iterator, $pattern, self::SCAN_COUNT);
+				if ($keys === false) {
+					break;
+				}
+				if ($keys !== []) {
+					$cache->unlink($keys);
+				}
+			} while ($iterator > 0);
+		}
+
+		return true;
 	}
 
 	/**
@@ -123,6 +144,7 @@ class Redis extends Cache implements IMemcacheTTL {
 	 * @param int $ttl Time To Live in seconds. Defaults to 60*60*24
 	 * @return bool
 	 */
+	#[\Override]
 	public function add($key, $value, $ttl = 0) {
 		$value = self::encodeValue($value);
 		if ($ttl === 0) {
@@ -144,6 +166,7 @@ class Redis extends Cache implements IMemcacheTTL {
 	 * @param int $step
 	 * @return int | bool
 	 */
+	#[\Override]
 	public function inc($key, $step = 1) {
 		return $this->getCache()->incrBy($this->getPrefix() . $key, $step);
 	}
@@ -155,6 +178,7 @@ class Redis extends Cache implements IMemcacheTTL {
 	 * @param int $step
 	 * @return int | bool
 	 */
+	#[\Override]
 	public function dec($key, $step = 1) {
 		$res = $this->evalLua('dec', [$key], [$step]);
 		return ($res === 'NEX') ? false : $res;
@@ -168,6 +192,7 @@ class Redis extends Cache implements IMemcacheTTL {
 	 * @param mixed $new
 	 * @return bool
 	 */
+	#[\Override]
 	public function cas($key, $old, $new) {
 		$old = self::encodeValue($old);
 		$new = self::encodeValue($new);
@@ -182,12 +207,21 @@ class Redis extends Cache implements IMemcacheTTL {
 	 * @param mixed $old
 	 * @return bool
 	 */
+	#[\Override]
 	public function cad($key, $old) {
 		$old = self::encodeValue($old);
 
 		return $this->evalLua('cad', [$key], [$old]) > 0;
 	}
 
+	#[\Override]
+	public function ncad(string $key, mixed $old): bool {
+		$old = self::encodeValue($old);
+
+		return $this->evalLua('ncad', [$key], [$old]) > 0;
+	}
+
+	#[\Override]
 	public function setTTL($key, $ttl) {
 		if ($ttl === 0) {
 			// having infinite TTL can lead to leaked keys as the prefix changes with version upgrades
@@ -197,19 +231,22 @@ class Redis extends Cache implements IMemcacheTTL {
 		$this->getCache()->expire($this->getPrefix() . $key, $ttl);
 	}
 
+	#[\Override]
 	public function getTTL(string $key): int|false {
 		$ttl = $this->getCache()->ttl($this->getPrefix() . $key);
 		return $ttl > 0 ? (int)$ttl : false;
 	}
 
+	#[\Override]
 	public function compareSetTTL(string $key, mixed $value, int $ttl): bool {
 		$value = self::encodeValue($value);
 
 		return $this->evalLua('caSetTtl', [$key], [$value, $ttl]) > 0;
 	}
 
+	#[\Override]
 	public static function isAvailable(): bool {
-		return \OC::$server->get('RedisFactory')->isAvailable();
+		return Server::get(RedisFactory::class)->isAvailable();
 	}
 
 	protected function evalLua(string $scriptName, array $keys, array $args) {
@@ -226,10 +263,10 @@ class Redis extends Cache implements IMemcacheTTL {
 	}
 
 	protected static function encodeValue(mixed $value): string {
-		return is_int($value) ? (string) $value : json_encode($value);
+		return is_int($value) ? (string)$value : json_encode($value);
 	}
 
 	protected static function decodeValue(string $value): mixed {
-		return is_numeric($value) ? (int) $value : json_decode($value, true);
+		return is_numeric($value) ? (int)$value : json_decode($value, true);
 	}
 }

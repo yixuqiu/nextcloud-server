@@ -1,37 +1,20 @@
 <?php
+
 /**
- * @copyright Copyright (c) 2019 Julius Härtl <jus@bitgrid.net>
- *
- * @author Christoph Wurst <christoph@winzerhof-wurst.at>
- * @author Julius Härtl <jus@bitgrid.net>
- * @author Robin Appelman <robin@icewind.nl>
- * @author Tobias Kaminsky <tobias@kaminsky.me>
- *
- * @license GNU AGPL version 3 or any later version
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
- *
+ * SPDX-FileCopyrightText: 2019 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
+
 namespace OC\DirectEditing;
 
-use Doctrine\DBAL\FetchMode;
+use OCA\Encryption\Util;
 use OCP\AppFramework\Http\NotFoundResponse;
 use OCP\AppFramework\Http\Response;
 use OCP\AppFramework\Http\TemplateResponse;
 use OCP\Constants;
 use OCP\DB\QueryBuilder\IQueryBuilder;
 use OCP\DirectEditing\ACreateFromTemplate;
+use OCP\DirectEditing\ATemplate;
 use OCP\DirectEditing\IEditor;
 use OCP\DirectEditing\IManager;
 use OCP\DirectEditing\IToken;
@@ -43,57 +26,49 @@ use OCP\Files\Node;
 use OCP\Files\NotFoundException;
 use OCP\IDBConnection;
 use OCP\IL10N;
+use OCP\ISession;
+use OCP\IUserManager;
 use OCP\IUserSession;
 use OCP\L10N\IFactory;
 use OCP\Security\ISecureRandom;
+use OCP\Server;
 use OCP\Share\IShare;
 use Throwable;
 use function array_key_exists;
 use function in_array;
 
 class Manager implements IManager {
-	private const TOKEN_CLEANUP_TIME = 12 * 60 * 60 ;
+	private const int TOKEN_CLEANUP_TIME = 12 * 60 * 60 ;
 
 	public const TABLE_TOKENS = 'direct_edit';
 
 	/** @var IEditor[] */
 	private $editors = [];
-	/** @var IDBConnection */
-	private $connection;
-	/** @var IUserSession */
-	private $userSession;
-	/** @var ISecureRandom */
-	private $random;
 	/** @var string|null */
 	private $userId;
-	/** @var IRootFolder */
-	private $rootFolder;
 	/** @var IL10N */
 	private $l10n;
-	/** @var EncryptionManager */
-	private $encryptionManager;
 
 	public function __construct(
-		ISecureRandom $random,
-		IDBConnection $connection,
-		IUserSession $userSession,
-		IRootFolder $rootFolder,
-		IFactory $l10nFactory,
-		EncryptionManager $encryptionManager
+		private ISecureRandom $random,
+		private IDBConnection $connection,
+		private IUserSession $userSession,
+		private IRootFolder $rootFolder,
+		private IFactory $l10nFactory,
+		private EncryptionManager $encryptionManager,
+		private IUserManager $userManager,
+		private ISession $session,
 	) {
-		$this->random = $random;
-		$this->connection = $connection;
-		$this->userSession = $userSession;
 		$this->userId = $userSession->getUser() ? $userSession->getUser()->getUID() : null;
-		$this->rootFolder = $rootFolder;
 		$this->l10n = $l10nFactory->get('lib');
-		$this->encryptionManager = $encryptionManager;
 	}
 
+	#[\Override]
 	public function registerDirectEditor(IEditor $directEditor): void {
 		$this->editors[$directEditor->getId()] = $directEditor;
 	}
 
+	#[\Override]
 	public function getEditors(): array {
 		return $this->editors;
 	}
@@ -118,6 +93,10 @@ class Manager implements IManager {
 				}
 
 				$templates = array_map(function ($template) use ($creator) {
+					if ($template instanceof ATemplate) {
+						$template = $template->jsonSerialize();
+					}
+
 					$template['extension'] = $creator->getExtension();
 					$template['mimetype'] = $creator->getMimetype();
 					return $template;
@@ -129,6 +108,7 @@ class Manager implements IManager {
 		return $return;
 	}
 
+	#[\Override]
 	public function create(string $path, string $editorId, string $creatorId, $templateId = null): string {
 		$userFolder = $this->rootFolder->getUserFolder($this->userId);
 		if ($userFolder->nodeExists($path)) {
@@ -153,6 +133,7 @@ class Manager implements IManager {
 		throw new \RuntimeException('No creator found');
 	}
 
+	#[\Override]
 	public function open(string $filePath, ?string $editorId = null, ?int $fileId = null): string {
 		$userFolder = $this->rootFolder->getUserFolder($this->userId);
 		$file = $userFolder->get($filePath);
@@ -185,13 +166,14 @@ class Manager implements IManager {
 
 	private function findEditorForFile(File $file) {
 		foreach ($this->editors as $editor) {
-			if (in_array($file->getMimeType(), $editor->getMimetypes())) {
+			if (in_array($file->getMimeType(), $editor->getMimetypes(), true)) {
 				return $editor->getId();
 			}
 		}
 		throw new \RuntimeException('No default editor found for files mimetype');
 	}
 
+	#[\Override]
 	public function edit(string $token): Response {
 		try {
 			/** @var IEditor $editor */
@@ -225,22 +207,31 @@ class Manager implements IManager {
 		return $this->editors[$editorId];
 	}
 
+	#[\Override]
 	public function getToken(string $token): IToken {
 		$query = $this->connection->getQueryBuilder();
 		$query->select('*')->from(self::TABLE_TOKENS)
 			->where($query->expr()->eq('token', $query->createNamedParameter($token, IQueryBuilder::PARAM_STR)));
-		$result = $query->execute();
-		if ($tokenRow = $result->fetch(FetchMode::ASSOCIATIVE)) {
+		$result = $query->executeQuery();
+		if ($tokenRow = $result->fetchAssociative()) {
 			return new Token($this, $tokenRow);
 		}
 		throw new \RuntimeException('Failed to validate the token');
 	}
 
+	#[\Override]
 	public function cleanup(): int {
 		$query = $this->connection->getQueryBuilder();
 		$query->delete(self::TABLE_TOKENS)
 			->where($query->expr()->lt('timestamp', $query->createNamedParameter(time() - self::TOKEN_CLEANUP_TIME)));
-		return $query->execute();
+		return $query->executeStatement();
+	}
+
+	public function invalidateTokensForUser(string $uid): int {
+		$query = $this->connection->getQueryBuilder();
+		$query->delete(self::TABLE_TOKENS)
+			->where($query->expr()->eq('user_id', $query->createNamedParameter($uid)));
+		return $query->executeStatement();
 	}
 
 	public function refreshToken(string $token): bool {
@@ -248,16 +239,15 @@ class Manager implements IManager {
 		$query->update(self::TABLE_TOKENS)
 			->set('timestamp', $query->createNamedParameter(time(), IQueryBuilder::PARAM_INT))
 			->where($query->expr()->eq('token', $query->createNamedParameter($token, IQueryBuilder::PARAM_STR)));
-		$result = $query->execute();
+		$result = $query->executeStatement();
 		return $result !== 0;
 	}
-
 
 	public function invalidateToken(string $token): bool {
 		$query = $this->connection->getQueryBuilder();
 		$query->delete(self::TABLE_TOKENS)
 			->where($query->expr()->eq('token', $query->createNamedParameter($token, IQueryBuilder::PARAM_STR)));
-		$result = $query->execute();
+		$result = $query->executeStatement();
 		return $result !== 0;
 	}
 
@@ -267,12 +257,16 @@ class Manager implements IManager {
 			->set('accessed', $query->createNamedParameter(true, IQueryBuilder::PARAM_BOOL))
 			->set('timestamp', $query->createNamedParameter(time(), IQueryBuilder::PARAM_INT))
 			->where($query->expr()->eq('token', $query->createNamedParameter($token, IQueryBuilder::PARAM_STR)));
-		$result = $query->execute();
+		$result = $query->executeStatement();
 		return $result !== 0;
 	}
 
-	public function invokeTokenScope($userId): void {
-		\OC_User::setUserId($userId);
+	public function invokeTokenScope(string $userId): void {
+		if ($user = $this->userManager->get($userId)) {
+			$this->userSession->setUser($user);
+		} else {
+			$this->session->set('user_id', $userId);
+		}
 	}
 
 	public function revertTokenScope(): void {
@@ -292,7 +286,7 @@ class Manager implements IManager {
 				'share_id' => $query->createNamedParameter($share !== null ? $share->getId(): null),
 				'timestamp' => $query->createNamedParameter(time())
 			]);
-		$query->execute();
+		$query->executeStatement();
 		return $token;
 	}
 
@@ -314,6 +308,7 @@ class Manager implements IManager {
 		return $file;
 	}
 
+	#[\Override]
 	public function isEnabled(): bool {
 		if (!$this->encryptionManager->isEnabled()) {
 			return true;
@@ -322,8 +317,8 @@ class Manager implements IManager {
 		try {
 			$moduleId = $this->encryptionManager->getDefaultEncryptionModuleId();
 			$module = $this->encryptionManager->getEncryptionModule($moduleId);
-			/** @var \OCA\Encryption\Util $util */
-			$util = \OC::$server->get(\OCA\Encryption\Util::class);
+			/** @var Util $util */
+			$util = Server::get(Util::class);
 			if ($module->isReadyForUser($this->userId) && $util->isMasterKeyEnabled()) {
 				return true;
 			}

@@ -3,33 +3,14 @@
 declare(strict_types=1);
 
 /**
- * @copyright Copyright (c) 2018, Patrik Kernstock <info@pkern.at>
- *
- * @author Christoph Wurst <christoph@winzerhof-wurst.at>
- * @author Joas Schilling <coding@schilljs.com>
- * @author John Molakvoæ <skjnldsv@protonmail.com>
- * @author Patrik Kernstock <info@pkern.at>
- * @author Roeland Jago Douma <roeland@famdouma.nl>
- *
- * @license GNU AGPL version 3 or any later version
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
- *
+ * SPDX-FileCopyrightText: 2018 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
+
 namespace OC\Core\Command\App;
 
 use OC\Installer;
+use OCP\App\AppPathNotFoundException;
 use OCP\App\IAppManager;
 use Psr\Log\LoggerInterface;
 use Stecman\Component\Symfony\Console\BashCompletion\Completion\CompletionAwareInterface;
@@ -50,10 +31,18 @@ class Remove extends Command implements CompletionAwareInterface {
 		parent::__construct();
 	}
 
+	#[\Override]
 	protected function configure(): void {
 		$this
 			->setName('app:remove')
-			->setDescription('remove an app')
+			->setDescription('Remove an app from this Nextcloud instance')
+			->setHelp(
+				"Removes the specified app and, if present, runs the app's uninstall steps.\n"
+				. "\n"
+				. "By default, this command runs the app's uninstall steps (which may delete data) and then removes the app files.\n"
+				. "Use `--keep-data` to skip uninstall steps and preserve app data (database tables, configuration, and stored files).\n"
+				. "Note: Some apps may still preserve data either way, depending on their uninstall implementation.\n"
+			)
 			->addArgument(
 				'app-id',
 				InputArgument::REQUIRED,
@@ -63,63 +52,74 @@ class Remove extends Command implements CompletionAwareInterface {
 				'keep-data',
 				null,
 				InputOption::VALUE_NONE,
-				'keep app data and do not remove them'
+				'Do not run uninstall tasks; preserve app data and configuration'
 			);
 	}
 
+	#[\Override]
 	protected function execute(InputInterface $input, OutputInterface $output): int {
-		$appId = $input->getArgument('app-id');
+		$appId = (string)$input->getArgument('app-id');
+		$keepData = (bool)$input->getOption('keep-data');
 
-		// Check if the app is installed
-		if (!$this->manager->isInstalled($appId)) {
-			$output->writeln($appId . ' is not installed');
-			return 1;
-		}
-
-		// Removing shipped apps is not possible, therefore we pre-check that
-		// before trying to remove it
+		// Prevent removal of shipped/core apps
 		if ($this->manager->isShipped($appId)) {
-			$output->writeln($appId . ' could not be removed as it is a shipped app');
-			return 1;
+			$output->writeln("App '$appId' is a shipped/core app and cannot be removed.");
+			return self::FAILURE;
 		}
 
-		// If we want to keep the data of the app, we simply don't disable it here.
-		// App uninstall tasks are being executed when disabled. More info: PR #11627.
-		if (!$input->getOption('keep-data')) {
-			try {
-				$this->manager->disableApp($appId);
-				$output->writeln($appId . ' disabled');
-			} catch (Throwable $e) {
-				$output->writeln('<error>Error: ' . $e->getMessage() . '</error>');
-				$this->logger->error($e->getMessage(), [
-					'app' => 'CLI',
-					'exception' => $e,
-				]);
-				return 1;
-			}
-		}
-
-		// Let's try to remove the app...
+		// Prevent removal of apps that aren't even installed (note: don't use isInstalled(); it's a misnomer)
 		try {
-			$result = $this->installer->removeApp($appId);
-		} catch (Throwable $e) {
-			$output->writeln('<error>Error: ' . $e->getMessage() . '</error>');
-			$this->logger->error($e->getMessage(), [
-				'app' => 'CLI',
-				'exception' => $e,
-			]);
-			return 1;
-		}
-
-		if ($result === false) {
-			$output->writeln($appId . ' could not be removed');
-			return 1;
+			$this->manager->getAppPath($appId);
+		} catch (AppPathNotFoundException $e) {
+			$output->writeln("App '$appId' is not installed. Nothing to remove.");
+			return self::FAILURE; // one could argue this a no-op and should be considered a success (?)
 		}
 
 		$appVersion = $this->manager->getAppVersion($appId);
-		$output->writeln($appId . ' ' . $appVersion . ' removed');
 
-		return 0;
+		// Do not run the specified app's uninstall tasks -- preserving app data/config -- if requested
+		if ($keepData) {
+			$message = "Removing app '$appId' but keeping app data (uninstall hooks skipped).";
+			$output->writeln($message);
+			$this->logger->info($message, [ 'app' => 'CLI', ]);
+		} else {
+			// Disable the app before removing to trigger uninstall steps
+			try {
+				$this->manager->disableApp($appId);
+				$message = "Disabled app '$appId' (uninstall steps executed).";
+				$output->writeln($message);
+				$this->logger->info($message, [ 'app' => 'CLI', ]);
+			} catch (Throwable $e) {
+				$message = "Failed to disable app '$appId' (version $appVersion) - app removal skipped.";
+				$output->writeln('<error>Error: ' . $e->getMessage() . '</error>');
+				$output->writeln("\n" . $message);
+				$this->logger->error($message, [ 'app' => 'CLI', 'exception' => $e, ]);
+				return self::FAILURE;
+			}
+		}
+
+		// Remove the specified app
+		try {
+			$removeSuccess = $this->installer->removeApp($appId);
+		} catch (Throwable $e) {
+			$removeSuccess = false;
+			$output->writeln('<error>Error: ' . $e->getMessage() . '</error>');
+			$this->logger->error("Failed to remove app '$appId': " . $e->getMessage(), [ 'app' => 'CLI', 'exception' => $e, ]);
+		}
+
+		// Something went wrong during removeApp(); probably no removal took place or incomplete
+		if (!$removeSuccess) {
+			$message = "\nFailed to remove app '$appId' (version $appVersion) - app files/registration were not removed.";
+			$output->writeln($message);
+			$this->logger->error($message, [ 'app' => 'CLI', ]);
+			return self::FAILURE;
+		}
+
+		$message = "Removed app '$appId' (version $appVersion).";
+		$output->writeln($message);
+		$this->logger->info($message, [ 'app' => 'CLI', ]);
+
+		return self::SUCCESS;
 	}
 
 	/**
@@ -127,6 +127,7 @@ class Remove extends Command implements CompletionAwareInterface {
 	 * @param CompletionContext $context
 	 * @return string[]
 	 */
+	#[\Override]
 	public function completeOptionValues($optionName, CompletionContext $context): array {
 		return [];
 	}
@@ -136,9 +137,11 @@ class Remove extends Command implements CompletionAwareInterface {
 	 * @param CompletionContext $context
 	 * @return string[]
 	 */
+	#[\Override]
 	public function completeArgumentValues($argumentName, CompletionContext $context): array {
 		if ($argumentName === 'app-id') {
-			return $this->manager->getInstalledApps();
+			// TODO: Include disabled apps too
+			return $this->manager->getEnabledApps();
 		}
 		return [];
 	}

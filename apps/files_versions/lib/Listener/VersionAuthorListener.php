@@ -3,26 +3,14 @@
 declare(strict_types=1);
 
 /**
- * @author Eduardo Morales emoral435@gmail.com>
- *
- * @license GNU AGPL-3.0-or-later
- *
- * This code is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License, version 3,
- * as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program. If not, see <http://www.gnu.org/licenses/>
- *
+ * SPDX-FileCopyrightText: 2018 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
+
 namespace OCA\Files_Versions\Listener;
 
 use OC\Files\Node\Folder;
+use OCA\Files_Versions\Sabre\Plugin;
 use OCA\Files_Versions\Versions\IMetadataVersionBackend;
 use OCA\Files_Versions\Versions\IVersionManager;
 use OCP\EventDispatcher\Event;
@@ -43,6 +31,7 @@ class VersionAuthorListener implements IEventListener {
 	 * @abstract handles events from a nodes version being changed
 	 * @param Event $event the event that triggered this listener to activate
 	 */
+	#[\Override]
 	public function handle(Event $event): void {
 		if ($event instanceof NodeWrittenEvent) {
 			$this->post_write_hook($event->getNode());
@@ -61,8 +50,9 @@ class VersionAuthorListener implements IEventListener {
 		}
 		// check if our version manager supports setting the metadata
 		if ($this->versionManager instanceof IMetadataVersionBackend) {
+			$revision = $this->versionManager->getRevision($node);
 			$author = $user->getUID();
-			$this->versionManager->setMetadataValue($node, $node->getMTime(), 'author', $author);
+			$this->versionManager->setMetadataValue($node, $revision, Plugin::AUTHOR, $author);
 		}
 	}
 }

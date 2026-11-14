@@ -1,27 +1,9 @@
 <?php
 
 declare(strict_types=1);
-
 /**
- * @copyright Copyright (c) 2023 Kate Döen <kate.doeen@nextcloud.com>
- *
- * @author Kate Döen <kate.doeen@nextcloud.com>
- *
- * @license GNU AGPL version 3 or any later version
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
- *
+ * SPDX-FileCopyrightText: 2023 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
 namespace OC\Settings;
@@ -34,6 +16,7 @@ use OCP\IAppConfig;
 use OCP\IConfig;
 use OCP\IGroupManager;
 use OCP\IUser;
+use OCP\Security\ICrypto;
 use OCP\Server;
 use OCP\Settings\DeclarativeSettingsTypes;
 use OCP\Settings\Events\DeclarativeSettingsGetValueEvent;
@@ -41,6 +24,7 @@ use OCP\Settings\Events\DeclarativeSettingsRegisterFormEvent;
 use OCP\Settings\Events\DeclarativeSettingsSetValueEvent;
 use OCP\Settings\IDeclarativeManager;
 use OCP\Settings\IDeclarativeSettingsForm;
+use OCP\Settings\IDeclarativeSettingsFormWithHandlers;
 use Psr\Log\LoggerInterface;
 
 /**
@@ -51,24 +35,30 @@ use Psr\Log\LoggerInterface;
  * @psalm-import-type DeclarativeSettingsFormSchemaWithoutValues from IDeclarativeSettingsForm
  */
 class DeclarativeManager implements IDeclarativeManager {
-	public function __construct(
-		private IEventDispatcher $eventDispatcher,
-		private IGroupManager    $groupManager,
-		private Coordinator      $coordinator,
-		private IConfig          $config,
-		private IAppConfig       $appConfig,
-		private LoggerInterface  $logger,
-	) {
-	}
+
+	/** @var array<string, list<IDeclarativeSettingsForm>> */
+	private array $declarativeForms = [];
 
 	/**
 	 * @var array<string, list<DeclarativeSettingsFormSchemaWithoutValues>>
 	 */
 	private array $appSchemas = [];
 
+	public function __construct(
+		private IEventDispatcher $eventDispatcher,
+		private IGroupManager $groupManager,
+		private Coordinator $coordinator,
+		private IConfig $config,
+		private IAppConfig $appConfig,
+		private LoggerInterface $logger,
+		private ICrypto $crypto,
+	) {
+	}
+
 	/**
 	 * @inheritdoc
 	 */
+	#[\Override]
 	public function registerSchema(string $app, array $schema): void {
 		$this->appSchemas[$app] ??= [];
 
@@ -95,12 +85,17 @@ class DeclarativeManager implements IDeclarativeManager {
 	/**
 	 * @inheritdoc
 	 */
+	#[\Override]
 	public function loadSchemas(): void {
-		$declarativeSettings = $this->coordinator->getRegistrationContext()->getDeclarativeSettings();
-		foreach ($declarativeSettings as $declarativeSetting) {
-			/** @var IDeclarativeSettingsForm $declarativeSettingObject */
-			$declarativeSettingObject = Server::get($declarativeSetting->getService());
-			$this->registerSchema($declarativeSetting->getAppId(), $declarativeSettingObject->getSchema());
+		if (empty($this->declarativeForms)) {
+			$declarativeSettings = $this->coordinator->getRegistrationContext()->getDeclarativeSettings();
+			foreach ($declarativeSettings as $declarativeSetting) {
+				$app = $declarativeSetting->getAppId();
+				/** @var IDeclarativeSettingsForm $declarativeForm */
+				$declarativeForm = Server::get($declarativeSetting->getService());
+				$this->registerSchema($app, $declarativeForm->getSchema());
+				$this->declarativeForms[$app][] = $declarativeForm;
+			}
 		}
 
 		$this->eventDispatcher->dispatchTyped(new DeclarativeSettingsRegisterFormEvent($this));
@@ -109,6 +104,7 @@ class DeclarativeManager implements IDeclarativeManager {
 	/**
 	 * @inheritdoc
 	 */
+	#[\Override]
 	public function getFormIDs(IUser $user, string $type, string $section): array {
 		$isAdmin = $this->groupManager->isAdmin($user->getUID());
 		/** @var array<string, list<string>> $formIds */
@@ -138,6 +134,7 @@ class DeclarativeManager implements IDeclarativeManager {
 	 * @inheritdoc
 	 * @throws Exception
 	 */
+	#[\Override]
 	public function getFormsWithValues(IUser $user, ?string $type, ?string $section): array {
 		$isAdmin = $this->groupManager->isAdmin($user->getUID());
 		$forms = [];
@@ -150,8 +147,10 @@ class DeclarativeManager implements IDeclarativeManager {
 				if ($section !== null && $schema['section_id'] !== $section) {
 					continue;
 				}
-				// If listing all fields skip the admin fields which a non-admin user has no access to
-				if ($type === null && $schema['section_type'] === 'admin' && !$isAdmin) {
+				// Skip admin declarative forms for non-admin users. They have no access to
+				// these fields even when they are allowed to view the section through admin
+				// delegation, which only covers non-declarative settings.
+				if ($schema['section_type'] === DeclarativeSettingsTypes::SECTION_TYPE_ADMIN && !$isAdmin) {
 					continue;
 				}
 
@@ -187,7 +186,7 @@ class DeclarativeManager implements IDeclarativeManager {
 		if (array_key_exists($app, $this->appSchemas)) {
 			foreach ($this->appSchemas[$app] as $schema) {
 				foreach ($schema['fields'] as $field) {
-					if ($field['id'] == $fieldId) {
+					if ($field['id'] === $fieldId) {
 						if (array_key_exists('storage_type', $field)) {
 							return $field['storage_type'];
 						}
@@ -211,7 +210,7 @@ class DeclarativeManager implements IDeclarativeManager {
 		if (array_key_exists($app, $this->appSchemas)) {
 			foreach ($this->appSchemas[$app] as $schema) {
 				foreach ($schema['fields'] as $field) {
-					if ($field['id'] == $fieldId) {
+					if ($field['id'] === $fieldId) {
 						return $schema['section_type'];
 					}
 				}
@@ -243,6 +242,10 @@ class DeclarativeManager implements IDeclarativeManager {
 		$storageType = $this->getStorageType($app, $fieldId);
 		switch ($storageType) {
 			case DeclarativeSettingsTypes::STORAGE_TYPE_EXTERNAL:
+				$form = $this->getForm($app, $formId);
+				if ($form !== null && $form instanceof IDeclarativeSettingsFormWithHandlers) {
+					return $form->getValue($fieldId, $user);
+				}
 				$event = new DeclarativeSettingsGetValueEvent($user, $app, $formId, $fieldId);
 				$this->eventDispatcher->dispatchTyped($event);
 				return $event->getValue();
@@ -256,6 +259,7 @@ class DeclarativeManager implements IDeclarativeManager {
 	/**
 	 * @inheritdoc
 	 */
+	#[\Override]
 	public function setValue(IUser $user, string $app, string $formId, string $fieldId, mixed $value): void {
 		$sectionType = $this->getSectionType($app, $fieldId);
 		$this->assertAuthorized($user, $sectionType);
@@ -263,31 +267,85 @@ class DeclarativeManager implements IDeclarativeManager {
 		$storageType = $this->getStorageType($app, $fieldId);
 		switch ($storageType) {
 			case DeclarativeSettingsTypes::STORAGE_TYPE_EXTERNAL:
+				$form = $this->getForm($app, $formId);
+				if ($form !== null && $form instanceof IDeclarativeSettingsFormWithHandlers) {
+					$form->setValue($fieldId, $value, $user);
+					break;
+				}
+				// fall back to event handling
 				$this->eventDispatcher->dispatchTyped(new DeclarativeSettingsSetValueEvent($user, $app, $formId, $fieldId, $value));
 				break;
 			case DeclarativeSettingsTypes::STORAGE_TYPE_INTERNAL:
-				$this->saveInternalValue($user, $app, $fieldId, $value);
+				$this->saveInternalValue($user, $app, $formId, $fieldId, $value);
 				break;
 			default:
 				throw new Exception('Unknown storage type "' . $storageType . '"');
 		}
 	}
 
+	/**
+	 * If a declarative setting was registered as a form and not just a schema
+	 * then this will yield the registering form.
+	 */
+	private function getForm(string $app, string $formId): ?IDeclarativeSettingsForm {
+		$allForms = $this->declarativeForms[$app] ?? [];
+		foreach ($allForms as $form) {
+			if ($form->getSchema()['id'] === $formId) {
+				return $form;
+			}
+		}
+		return null;
+	}
+
 	private function getInternalValue(IUser $user, string $app, string $formId, string $fieldId): mixed {
 		$sectionType = $this->getSectionType($app, $fieldId);
 		$defaultValue = $this->getDefaultValue($app, $formId, $fieldId);
+
+		$field = $this->getSchemaField($app, $formId, $fieldId);
+		$isSensitive = $field !== null && isset($field['sensitive']) && $field['sensitive'] === true;
+
 		switch ($sectionType) {
 			case DeclarativeSettingsTypes::SECTION_TYPE_ADMIN:
-				return $this->config->getAppValue($app, $fieldId, $defaultValue);
+				$value = $this->config->getAppValue($app, $fieldId, $defaultValue);
+				break;
 			case DeclarativeSettingsTypes::SECTION_TYPE_PERSONAL:
-				return $this->config->getUserValue($user->getUID(), $app, $fieldId, $defaultValue);
+				$value = $this->config->getUserValue($user->getUID(), $app, $fieldId, $defaultValue);
+				break;
 			default:
 				throw new Exception('Unknown section type "' . $sectionType . '"');
 		}
+		if ($isSensitive && $value !== '') {
+			try {
+				$value = $this->crypto->decrypt($value);
+			} catch (Exception $e) {
+				$this->logger->warning('Failed to decrypt sensitive value for field {field} in app {app}: {message}', [
+					'field' => $fieldId,
+					'app' => $app,
+					'message' => $e->getMessage(),
+				]);
+				$value = $defaultValue;
+			}
+		}
+		return $value;
 	}
 
-	private function saveInternalValue(IUser $user, string $app, string $fieldId, mixed $value): void {
+	private function saveInternalValue(IUser $user, string $app, string $formId, string $fieldId, mixed $value): void {
 		$sectionType = $this->getSectionType($app, $fieldId);
+
+		$field = $this->getSchemaField($app, $formId, $fieldId);
+		if ($field !== null && isset($field['sensitive']) && $field['sensitive'] === true && $value !== '' && $value !== 'dummySecret') {
+			try {
+				$value = $this->crypto->encrypt($value);
+			} catch (Exception $e) {
+				$this->logger->warning('Failed to decrypt sensitive value for field {field} in app {app}: {message}', [
+					'field' => $fieldId,
+					'app' => $app,
+					'message' => $e->getMessage()]
+				);
+				throw new Exception('Failed to encrypt sensitive value');
+			}
+		}
+
 		switch ($sectionType) {
 			case DeclarativeSettingsTypes::SECTION_TYPE_ADMIN:
 				$this->appConfig->setValueString($app, $fieldId, $value);
@@ -298,6 +356,27 @@ class DeclarativeManager implements IDeclarativeManager {
 			default:
 				throw new Exception('Unknown section type "' . $sectionType . '"');
 		}
+	}
+
+	private function getSchemaField(string $app, string $formId, string $fieldId): ?array {
+		$form = $this->getForm($app, $formId);
+		if ($form !== null) {
+			foreach ($form->getSchema()['fields'] as $field) {
+				if ($field['id'] === $fieldId) {
+					return $field;
+				}
+			}
+		}
+		foreach ($this->appSchemas[$app] ?? [] as $schema) {
+			if ($schema['id'] === $formId) {
+				foreach ($schema['fields'] as $field) {
+					if ($field['id'] === $fieldId) {
+						return $field;
+					}
+				}
+			}
+		}
+		return null;
 	}
 
 	private function getDefaultValue(string $app, string $formId, string $fieldId): mixed {
@@ -328,7 +407,7 @@ class DeclarativeManager implements IDeclarativeManager {
 			$this->logger->warning('Declarative settings: missing section_type', ['app' => $appId, 'form_id' => $formId]);
 			return false;
 		}
-		if (!in_array($schema['section_type'], [DeclarativeSettingsTypes::SECTION_TYPE_ADMIN, DeclarativeSettingsTypes::SECTION_TYPE_PERSONAL])) {
+		if (!in_array($schema['section_type'], [DeclarativeSettingsTypes::SECTION_TYPE_ADMIN, DeclarativeSettingsTypes::SECTION_TYPE_PERSONAL], true)) {
 			$this->logger->warning('Declarative settings: invalid section_type', ['app' => $appId, 'form_id' => $formId, 'section_type' => $schema['section_type']]);
 			return false;
 		}
@@ -340,7 +419,7 @@ class DeclarativeManager implements IDeclarativeManager {
 			$this->logger->warning('Declarative settings: missing storage_type', ['app' => $appId, 'form_id' => $formId]);
 			return false;
 		}
-		if (!in_array($schema['storage_type'], [DeclarativeSettingsTypes::STORAGE_TYPE_EXTERNAL, DeclarativeSettingsTypes::STORAGE_TYPE_INTERNAL])) {
+		if (!in_array($schema['storage_type'], [DeclarativeSettingsTypes::STORAGE_TYPE_EXTERNAL, DeclarativeSettingsTypes::STORAGE_TYPE_INTERNAL], true)) {
 			$this->logger->warning('Declarative settings: invalid storage_type', ['app' => $appId, 'form_id' => $formId, 'storage_type' => $schema['storage_type']]);
 			return false;
 		}
@@ -371,9 +450,15 @@ class DeclarativeManager implements IDeclarativeManager {
 				DeclarativeSettingsTypes::SELECT, DeclarativeSettingsTypes::CHECKBOX,
 				DeclarativeSettingsTypes::URL, DeclarativeSettingsTypes::EMAIL, DeclarativeSettingsTypes::NUMBER,
 				DeclarativeSettingsTypes::TEL, DeclarativeSettingsTypes::TEXT, DeclarativeSettingsTypes::PASSWORD,
-			])) {
+			], true)) {
 				$this->logger->warning('Declarative settings: invalid field type', [
 					'app' => $appId, 'form_id' => $formId, 'field_id' => $fieldId, 'type' => $field['type'],
+				]);
+				return false;
+			}
+			if (isset($field['sensitive']) && $field['sensitive'] === true && !in_array($field['type'], [DeclarativeSettingsTypes::TEXT, DeclarativeSettingsTypes::PASSWORD], true)) {
+				$this->logger->warning('Declarative settings: sensitive field type is supported only for TEXT and PASSWORD types ({app}, {form_id}, {field_id})', [
+					'app' => $appId, 'form_id' => $formId, 'field_id' => $fieldId,
 				]);
 				return false;
 			}
@@ -390,7 +475,7 @@ class DeclarativeManager implements IDeclarativeManager {
 		if (in_array($field['type'], [
 			DeclarativeSettingsTypes::MULTI_SELECT, DeclarativeSettingsTypes::MULTI_CHECKBOX, DeclarativeSettingsTypes::RADIO,
 			DeclarativeSettingsTypes::SELECT
-		])) {
+		], true)) {
 			if (!isset($field['options'])) {
 				$this->logger->warning('Declarative settings: missing field options', ['app' => $appId, 'form_id' => $formId, 'field_id' => $fieldId]);
 				return false;

@@ -1,36 +1,18 @@
 <?php
+
 /**
- * @copyright Copyright (c) 2016, ownCloud, Inc.
- *
- * @author Christoph Wurst <christoph@winzerhof-wurst.at>
- * @author Lukas Reschke <lukas@statuscode.ch>
- * @author Morris Jobke <hey@morrisjobke.de>
- * @author Robin Appelman <robin@icewind.nl>
- * @author Roeland Jago Douma <roeland@famdouma.nl>
- * @author Thomas Müller <thomas.mueller@tmit.eu>
- * @author Richard Steinmetz <richard@steinmetz.cloud>
- *
- * @license AGPL-3.0
- *
- * This code is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License, version 3,
- * as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program. If not, see <http://www.gnu.org/licenses/>
- *
+ * SPDX-FileCopyrightText: 2016-2024 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-FileCopyrightText: 2016 ownCloud, Inc.
+ * SPDX-License-Identifier: AGPL-3.0-only
  */
+
 namespace OCA\DAV\Connector\Sabre;
 
 use OCA\DAV\CalDAV\CachedSubscription;
 use OCA\DAV\CalDAV\Calendar;
 use OCA\DAV\CardDAV\AddressBook;
 use Sabre\CalDAV\Principal\User;
+use Sabre\DAV\Exception\Forbidden;
 use Sabre\DAV\Exception\NotFound;
 use Sabre\DAV\INode;
 use Sabre\DAV\PropFind;
@@ -51,6 +33,7 @@ class DavAclPlugin extends \Sabre\DAVACL\Plugin {
 		$this->allowUnauthenticatedAccess = false;
 	}
 
+	#[\Override]
 	public function checkPrivileges($uri, $privileges, $recursion = self::R_PARENT, $throwExceptions = true) {
 		$access = parent::checkPrivileges($uri, $privileges, $recursion, false);
 		if ($access === false && $throwExceptions) {
@@ -69,18 +52,25 @@ class DavAclPlugin extends \Sabre\DAVACL\Plugin {
 					$type = 'Node';
 					break;
 			}
-			throw new NotFound(
-				sprintf(
-					"%s with name '%s' could not be found",
-					$type,
-					$node->getName()
-				)
-			);
+
+			if ($this->getCurrentUserPrincipal() === $node->getOwner()) {
+				throw new Forbidden('Access denied');
+			} else {
+				throw new NotFound(
+					sprintf(
+						"%s with name '%s' could not be found",
+						$type,
+						$node->getName()
+					)
+				);
+			}
+
 		}
 
 		return $access;
 	}
 
+	#[\Override]
 	public function propFind(PropFind $propFind, INode $node) {
 		if ($node instanceof Node) {
 			// files don't use dav acls
@@ -102,6 +92,7 @@ class DavAclPlugin extends \Sabre\DAVACL\Plugin {
 		return parent::propFind($propFind, $node);
 	}
 
+	#[\Override]
 	public function beforeMethod(RequestInterface $request, ResponseInterface $response) {
 		$path = $request->getPath();
 
@@ -121,7 +112,7 @@ class DavAclPlugin extends \Sabre\DAVACL\Plugin {
 			// is calendars/users/bob or addressbooks/users/bob readable?
 			$this->checkPrivileges($parentName, '{DAV:}read');
 		} elseif ($request->getMethod() === 'MKCALENDAR' || $request->getMethod() === 'MKCOL') {
-			// is calendars/users/bob or addressbooks/users/bob writeable?
+			// is calendars/users/bob or addressbooks/users/bob writable?
 			$this->checkPrivileges($parentName, '{DAV:}write');
 		}
 	}

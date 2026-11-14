@@ -2,25 +2,8 @@
 
 declare(strict_types=1);
 /**
- * @copyright 2023 Maxence Lange <maxence@artificial-owl.com>
- *
- * @author Maxence Lange <maxence@artificial-owl.com>
- *
- * @license GNU AGPL version 3 or any later version
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
- *
+ * SPDX-FileCopyrightText: 2023 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
 namespace OC\FilesMetadata\Model;
@@ -35,7 +18,6 @@ use OCP\FilesMetadata\Model\IMetadataValueWrapper;
  * @since 28.0.0
  */
 class MetadataValueWrapper implements IMetadataValueWrapper {
-	private string $type;
 	/** @var string|int|float|bool|array|string[]|int[] */
 	private mixed $value = null;
 	private string $etag = '';
@@ -55,8 +37,9 @@ class MetadataValueWrapper implements IMetadataValueWrapper {
 	 * @see self::TYPE_STRING
 	 * @since 28.0.0
 	 */
-	public function __construct(string $type = '') {
-		$this->type = $type;
+	public function __construct(
+		private string $type = '',
+	) {
 	}
 
 	/**
@@ -71,6 +54,7 @@ class MetadataValueWrapper implements IMetadataValueWrapper {
 	 * @see self::TYPE_STRING
 	 * @since 28.0.0
 	 */
+	#[\Override]
 	public function getType(): string {
 		return $this->type;
 	}
@@ -89,6 +73,7 @@ class MetadataValueWrapper implements IMetadataValueWrapper {
 	 * @see self::TYPE_STRING
 	 * @since 28.0.0
 	 */
+	#[\Override]
 	public function isType(string $type): bool {
 		return (strtolower($type) === strtolower($this->type));
 	}
@@ -108,6 +93,7 @@ class MetadataValueWrapper implements IMetadataValueWrapper {
 	 * @see self::TYPE_FLOAT
 	 * @since 28.0.0
 	 */
+	#[\Override]
 	public function assertType(string $type): self {
 		if (!$this->isType($type)) {
 			throw new FilesMetadataTypeException('type is \'' . $this->getType() . '\', expecting \'' . $type . '\'');
@@ -124,6 +110,7 @@ class MetadataValueWrapper implements IMetadataValueWrapper {
 	 * @throws FilesMetadataTypeException if wrapper was not set to store a string
 	 * @since 28.0.0
 	 */
+	#[\Override]
 	public function setValueString(string $value): self {
 		$this->assertType(self::TYPE_STRING);
 		$this->value = $value;
@@ -139,6 +126,7 @@ class MetadataValueWrapper implements IMetadataValueWrapper {
 	 * @throws FilesMetadataTypeException if wrapper was not set to store an int
 	 * @since 28.0.0
 	 */
+	#[\Override]
 	public function setValueInt(int $value): self {
 		$this->assertType(self::TYPE_INT);
 		$this->value = $value;
@@ -154,6 +142,7 @@ class MetadataValueWrapper implements IMetadataValueWrapper {
 	 * @throws FilesMetadataTypeException if wrapper was not set to store a float
 	 * @since 28.0.0
 	 */
+	#[\Override]
 	public function setValueFloat(float $value): self {
 		$this->assertType(self::TYPE_FLOAT);
 		$this->value = $value;
@@ -169,10 +158,10 @@ class MetadataValueWrapper implements IMetadataValueWrapper {
 	 * @throws FilesMetadataTypeException if wrapper was not set to store a bool
 	 * @since 28.0.0
 	 */
+	#[\Override]
 	public function setValueBool(bool $value): self {
 		$this->assertType(self::TYPE_BOOL);
 		$this->value = $value;
-
 
 		return $this;
 	}
@@ -185,6 +174,7 @@ class MetadataValueWrapper implements IMetadataValueWrapper {
 	 * @throws FilesMetadataTypeException if wrapper was not set to store an array
 	 * @since 28.0.0
 	 */
+	#[\Override]
 	public function setValueArray(array $value): self {
 		$this->assertType(self::TYPE_ARRAY);
 		$this->value = $value;
@@ -200,6 +190,7 @@ class MetadataValueWrapper implements IMetadataValueWrapper {
 	 * @throws FilesMetadataTypeException if wrapper was not set to store a string list
 	 * @since 28.0.0
 	 */
+	#[\Override]
 	public function setValueStringList(array $value): self {
 		$this->assertType(self::TYPE_STRING_LIST);
 		// TODO confirm value is an array or string ?
@@ -216,6 +207,7 @@ class MetadataValueWrapper implements IMetadataValueWrapper {
 	 * @throws FilesMetadataTypeException if wrapper was not set to store an int list
 	 * @since 28.0.0
 	 */
+	#[\Override]
 	public function setValueIntList(array $value): self {
 		$this->assertType(self::TYPE_INT_LIST);
 		// TODO confirm value is an array of int ?
@@ -224,7 +216,6 @@ class MetadataValueWrapper implements IMetadataValueWrapper {
 		return $this;
 	}
 
-
 	/**
 	 * @inheritDoc
 	 * @return string set value
@@ -232,6 +223,7 @@ class MetadataValueWrapper implements IMetadataValueWrapper {
 	 * @throws FilesMetadataNotFoundException if value is not set
 	 * @since 28.0.0
 	 */
+	#[\Override]
 	public function getValueString(): string {
 		$this->assertType(self::TYPE_STRING);
 		if ($this->value === null) {
@@ -248,6 +240,7 @@ class MetadataValueWrapper implements IMetadataValueWrapper {
 	 * @throws FilesMetadataNotFoundException if value is not set
 	 * @since 28.0.0
 	 */
+	#[\Override]
 	public function getValueInt(): int {
 		$this->assertType(self::TYPE_INT);
 		if ($this->value === null) {
@@ -264,6 +257,7 @@ class MetadataValueWrapper implements IMetadataValueWrapper {
 	 * @throws FilesMetadataNotFoundException if value is not set
 	 * @since 28.0.0
 	 */
+	#[\Override]
 	public function getValueFloat(): float {
 		$this->assertType(self::TYPE_FLOAT);
 		if ($this->value === null) {
@@ -280,6 +274,7 @@ class MetadataValueWrapper implements IMetadataValueWrapper {
 	 * @throws FilesMetadataNotFoundException if value is not set
 	 * @since 28.0.0
 	 */
+	#[\Override]
 	public function getValueBool(): bool {
 		$this->assertType(self::TYPE_BOOL);
 		if ($this->value === null) {
@@ -296,6 +291,7 @@ class MetadataValueWrapper implements IMetadataValueWrapper {
 	 * @throws FilesMetadataNotFoundException if value is not set
 	 * @since 28.0.0
 	 */
+	#[\Override]
 	public function getValueArray(): array {
 		$this->assertType(self::TYPE_ARRAY);
 		if ($this->value === null) {
@@ -312,6 +308,7 @@ class MetadataValueWrapper implements IMetadataValueWrapper {
 	 * @throws FilesMetadataNotFoundException if value is not set
 	 * @since 28.0.0
 	 */
+	#[\Override]
 	public function getValueStringList(): array {
 		$this->assertType(self::TYPE_STRING_LIST);
 		if ($this->value === null) {
@@ -328,6 +325,7 @@ class MetadataValueWrapper implements IMetadataValueWrapper {
 	 * @throws FilesMetadataNotFoundException if value is not set
 	 * @since 28.0.0
 	 */
+	#[\Override]
 	public function getValueIntList(): array {
 		$this->assertType(self::TYPE_INT_LIST);
 		if ($this->value === null) {
@@ -343,6 +341,7 @@ class MetadataValueWrapper implements IMetadataValueWrapper {
 	 * @throws FilesMetadataNotFoundException if value is not set
 	 * @since 28.0.0
 	 */
+	#[\Override]
 	public function getValueAny(): mixed {
 		if ($this->value === null) {
 			throw new FilesMetadataNotFoundException('value is not set');
@@ -356,6 +355,7 @@ class MetadataValueWrapper implements IMetadataValueWrapper {
 	 * @return string stored etag
 	 * @since 29.0.0
 	 */
+	#[\Override]
 	public function getEtag(): string {
 		return $this->etag;
 	}
@@ -367,6 +367,7 @@ class MetadataValueWrapper implements IMetadataValueWrapper {
 	 * @return self
 	 * @since 29.0.0
 	 */
+	#[\Override]
 	public function setEtag(string $etag): self {
 		$this->etag = $etag;
 		return $this;
@@ -379,6 +380,7 @@ class MetadataValueWrapper implements IMetadataValueWrapper {
 	 * @return self
 	 * @since 28.0.0
 	 */
+	#[\Override]
 	public function setIndexed(bool $indexed): self {
 		$this->indexed = $indexed;
 
@@ -390,6 +392,7 @@ class MetadataValueWrapper implements IMetadataValueWrapper {
 	 * @return bool TRUE if value is an indexed value
 	 * @since 28.0.0
 	 */
+	#[\Override]
 	public function isIndexed(): bool {
 		return $this->indexed;
 	}
@@ -401,6 +404,7 @@ class MetadataValueWrapper implements IMetadataValueWrapper {
 	 * @return self
 	 * @since 28.0.0
 	 */
+	#[\Override]
 	public function setEditPermission(int $permission): self {
 		$this->editPermission = $permission;
 
@@ -412,6 +416,7 @@ class MetadataValueWrapper implements IMetadataValueWrapper {
 	 * @return int edit permission
 	 * @since 28.0.0
 	 */
+	#[\Override]
 	public function getEditPermission(): int {
 		return $this->editPermission;
 	}
@@ -424,6 +429,7 @@ class MetadataValueWrapper implements IMetadataValueWrapper {
 	 * @see jsonSerialize
 	 * @since 28.0.0
 	 */
+	#[\Override]
 	public function import(array $data): self {
 		$this->value = $data['value'] ?? null;
 		$this->type = $data['type'] ?? '';
@@ -433,6 +439,7 @@ class MetadataValueWrapper implements IMetadataValueWrapper {
 		return $this;
 	}
 
+	#[\Override]
 	public function jsonSerialize(bool $emptyValues = false): array {
 		return [
 			'value' => ($emptyValues) ? null : $this->value,

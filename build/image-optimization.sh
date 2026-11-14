@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
-
+#
+# SPDX-FileCopyrightText: 2017 Nextcloud GmbH and Nextcloud contributors
+# SPDX-License-Identifier: AGPL-3.0-or-later
+#
 set -e
 
 OPTIPNG=$(which optipng)
@@ -41,9 +44,6 @@ function recursive_optimize_images() {
 		return
 	elif [[ "$DIR_NAME" == "build" ]]; then
 		echo -e "\033[0;36mIgnoring build for image optimization\033[0m"
-		return
-	elif [[ "$DIR_NAME" == "cypress" ]]; then
-		echo -e "\033[0;36mIgnoring cypress for image optimization\033[0m"
 		return
 	elif [[ "$DIR_NAME" == "node_modules" ]]; then
 		echo -e "\033[0;36mIgnoring node_modules for image optimization\033[0m"

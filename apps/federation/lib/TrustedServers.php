@@ -1,30 +1,11 @@
 <?php
+
 /**
- * @copyright Copyright (c) 2016, ownCloud, Inc.
- *
- * @author Arthur Schiwon <blizzz@arthur-schiwon.de>
- * @author Bjoern Schiessle <bjoern@schiessle.org>
- * @author Björn Schießle <bjoern@schiessle.org>
- * @author Christoph Wurst <christoph@winzerhof-wurst.at>
- * @author Morris Jobke <hey@morrisjobke.de>
- * @author Roeland Jago Douma <roeland@famdouma.nl>
- * @author Thomas Müller <thomas.mueller@tmit.eu>
- *
- * @license AGPL-3.0
- *
- * This code is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License, version 3,
- * as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program. If not, see <http://www.gnu.org/licenses/>
- *
+ * SPDX-FileCopyrightText: 2016-2024 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-FileCopyrightText: 2016 ownCloud, Inc.
+ * SPDX-License-Identifier: AGPL-3.0-only
  */
+
 namespace OCA\Federation;
 
 use OCA\Federation\BackgroundJob\RequestSharedSecret;
@@ -37,6 +18,7 @@ use OCP\Federation\Events\TrustedServerRemovedEvent;
 use OCP\HintException;
 use OCP\Http\Client\IClientService;
 use OCP\IConfig;
+use OCP\Log\Audit\CriticalActionPerformedEvent;
 use OCP\Security\ISecureRandom;
 use Psr\Log\LoggerInterface;
 
@@ -51,36 +33,19 @@ class TrustedServers {
 	/** remote server revoked access */
 	public const STATUS_ACCESS_REVOKED = 4;
 
-	private DbHandler $dbHandler;
-	private IClientService $httpClientService;
-	private LoggerInterface $logger;
-	private IJobList $jobList;
-	private ISecureRandom $secureRandom;
-	private IConfig $config;
-	private IEventDispatcher $dispatcher;
-	private ITimeFactory $timeFactory;
-
 	/** @var list<array{id: int, url: string, url_hash: string, shared_secret: ?string, status: int, sync_token: ?string}>|null */
 	private ?array $trustedServersCache = null;
 
 	public function __construct(
-		DbHandler $dbHandler,
-		IClientService $httpClientService,
-		LoggerInterface $logger,
-		IJobList $jobList,
-		ISecureRandom $secureRandom,
-		IConfig $config,
-		IEventDispatcher $dispatcher,
-		ITimeFactory $timeFactory
+		private DbHandler $dbHandler,
+		private IClientService $httpClientService,
+		private LoggerInterface $logger,
+		private IJobList $jobList,
+		private ISecureRandom $secureRandom,
+		private IConfig $config,
+		private IEventDispatcher $dispatcher,
+		private ITimeFactory $timeFactory,
 	) {
-		$this->dbHandler = $dbHandler;
-		$this->httpClientService = $httpClientService;
-		$this->logger = $logger;
-		$this->jobList = $jobList;
-		$this->secureRandom = $secureRandom;
-		$this->config = $config;
-		$this->dispatcher = $dispatcher;
-		$this->timeFactory = $timeFactory;
 	}
 
 	/**
@@ -100,9 +65,25 @@ class TrustedServers {
 					'created' => $this->timeFactory->getTime()
 				]
 			);
+			$this->dispatcher->dispatchTyped(new CriticalActionPerformedEvent(
+				'Trusted server "%s" was added with ID "%s"',
+				[
+					'url' => $url,
+					'serverId' => $result,
+				],
+				false,
+				'federation.trusted_server.added',
+			));
 		}
 
 		return $result;
+	}
+
+	/**
+	 * Get the token used to exchange the shared secret with the given server
+	 */
+	public function getToken(string $url): string {
+		return $this->dbHandler->getToken($url);
 	}
 
 	/**
@@ -117,6 +98,12 @@ class TrustedServers {
 	 */
 	public function addSharedSecret(string $url, string $sharedSecret): void {
 		$this->dbHandler->addSharedSecret($url, $sharedSecret);
+		$this->dispatcher->dispatchTyped(new CriticalActionPerformedEvent(
+			'Shared secret with trusted server "%s" was exchanged',
+			['url' => $url],
+			false,
+			'federation.shared_secret.exchanged',
+		));
 	}
 
 	/**
@@ -125,21 +112,49 @@ class TrustedServers {
 	public function removeServer(int $id): void {
 		$server = $this->dbHandler->getServerById($id);
 		$this->dbHandler->removeServer($id);
-		$this->dispatcher->dispatchTyped(new TrustedServerRemovedEvent($server['url_hash']));
-
+		$this->dispatcher->dispatchTyped(new TrustedServerRemovedEvent($server['url_hash'], $server['url']));
+		$this->dispatcher->dispatchTyped(new CriticalActionPerformedEvent(
+			'Trusted server "%s" was removed',
+			[
+				'url' => $server['url'],
+				'urlHash' => $server['url_hash'],
+			],
+			false,
+			'federation.trusted_server.removed',
+		));
 	}
 
 	/**
 	 * Get all trusted servers
 	 *
 	 * @return list<array{id: int, url: string, url_hash: string, shared_secret: ?string, status: int, sync_token: ?string}>
-	 * @throws Exception
+	 * @throws \Exception
 	 */
-	public function getServers() {
+	public function getServers(): ?array {
 		if ($this->trustedServersCache === null) {
 			$this->trustedServersCache = $this->dbHandler->getAllServer();
 		}
 		return $this->trustedServersCache;
+	}
+
+	/**
+	 * Get a trusted server
+	 *
+	 * @return array{id: int, url: string, url_hash: string, shared_secret: ?string, status: int, sync_token: ?string}
+	 * @throws Exception
+	 */
+	public function getServer(int $id): ?array {
+		if ($this->trustedServersCache === null) {
+			$this->trustedServersCache = $this->dbHandler->getAllServer();
+		}
+
+		foreach ($this->trustedServersCache as $server) {
+			if ($server['id'] === $id) {
+				return $server;
+			}
+		}
+
+		throw new \Exception('No server found with ID: ' . $id);
 	}
 
 	/**
@@ -175,6 +190,7 @@ class TrustedServers {
 				[
 					'timeout' => 3,
 					'connect_timeout' => 3,
+					'verify' => !$this->config->getSystemValue('sharing.federation.allowSelfSignedCertificates', false),
 				]
 			);
 			if ($result->getStatusCode() === Http::STATUS_OK) {
@@ -186,7 +202,6 @@ class TrustedServers {
 			}
 		} catch (\Exception $e) {
 			$this->logger->error('No Nextcloud server.', [
-				'app' => 'federation',
 				'exception' => $e,
 			]);
 			return false;

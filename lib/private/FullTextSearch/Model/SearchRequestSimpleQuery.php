@@ -1,29 +1,11 @@
 <?php
 
 declare(strict_types=1);
-
 /**
- * @copyright 2018
- *
- * @author Christoph Wurst <christoph@winzerhof-wurst.at>
- * @author Maxence Lange <maxence@artificial-owl.com>
- *
- * @license GNU AGPL version 3 or any later version
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
- *
+ * SPDX-FileCopyrightText: 2019 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
+
 namespace OC\FullTextSearch\Model;
 
 use JsonSerializable;
@@ -39,7 +21,6 @@ use OCP\FullTextSearch\Model\ISearchRequestSimpleQuery;
 final class SearchRequestSimpleQuery implements ISearchRequestSimpleQuery, JsonSerializable {
 	private array $values = [];
 
-
 	/**
 	 * SearchRequestQuery constructor.
 	 *
@@ -51,22 +32,22 @@ final class SearchRequestSimpleQuery implements ISearchRequestSimpleQuery, JsonS
 	) {
 	}
 
-
 	/**
 	 * Get the compare type of the query
 	 *
 	 * @since 17.0.0
 	 */
+	#[\Override]
 	public function getType(): int {
 		return $this->type;
 	}
-
 
 	/**
 	 * Get the field to apply query
 	 *
 	 * @since 17.0.0
 	 */
+	#[\Override]
 	public function getField(): string {
 		return $this->field;
 	}
@@ -76,28 +57,29 @@ final class SearchRequestSimpleQuery implements ISearchRequestSimpleQuery, JsonS
 	 *
 	 * @since 17.0.0
 	 */
+	#[\Override]
 	public function setField(string $field): ISearchRequestSimpleQuery {
 		$this->field = $field;
 
 		return $this;
 	}
 
-
 	/**
 	 * Get the value to compare (string)
 	 *
 	 * @since 17.0.0
 	 */
+	#[\Override]
 	public function getValues(): array {
 		return $this->values;
 	}
-
 
 	/**
 	 * Add value to compare (string)
 	 *
 	 * @since 17.0.0
 	 */
+	#[\Override]
 	public function addValue(string $value): ISearchRequestSimpleQuery {
 		$this->values[] = $value;
 
@@ -109,6 +91,7 @@ final class SearchRequestSimpleQuery implements ISearchRequestSimpleQuery, JsonS
 	 *
 	 * @since 17.0.0
 	 */
+	#[\Override]
 	public function addValueInt(int $value): ISearchRequestSimpleQuery {
 		$this->values[] = $value;
 
@@ -120,6 +103,7 @@ final class SearchRequestSimpleQuery implements ISearchRequestSimpleQuery, JsonS
 	 *
 	 * @since 17.0.0
 	 */
+	#[\Override]
 	public function addValueArray(array $value): ISearchRequestSimpleQuery {
 		$this->values[] = $value;
 
@@ -131,16 +115,17 @@ final class SearchRequestSimpleQuery implements ISearchRequestSimpleQuery, JsonS
 	 *
 	 * @since 17.0.0
 	 */
+	#[\Override]
 	public function addValueBool(bool $value): ISearchRequestSimpleQuery {
 		$this->values[] = $value;
 
 		return $this;
 	}
 
-
 	/**
 	 * @since 17.0.0
 	 */
+	#[\Override]
 	public function jsonSerialize(): array {
 		return [
 			'type' => $this->getType(),

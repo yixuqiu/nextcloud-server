@@ -1,31 +1,11 @@
 <?php
+
 /**
- * @copyright Copyright (c) 2016, ownCloud, Inc.
- *
- * @author Christoph Wurst <christoph@winzerhof-wurst.at>
- * @author Individual IT Services <info@individual-it.net>
- * @author Joas Schilling <coding@schilljs.com>
- * @author Morris Jobke <hey@morrisjobke.de>
- * @author Ole Ostergaard <ole.c.ostergaard@gmail.com>
- * @author Robin Appelman <robin@icewind.nl>
- * @author Roeland Jago Douma <roeland@famdouma.nl>
- * @author Carl Schwan <carl@carlschwan.eu>
- *
- * @license AGPL-3.0
- *
- * This code is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License, version 3,
- * as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program. If not, see <http://www.gnu.org/licenses/>
- *
+ * SPDX-FileCopyrightText: 2016-2024 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-FileCopyrightText: 2016 ownCloud, Inc.
+ * SPDX-License-Identifier: AGPL-3.0-only
  */
+
 namespace OC\Lock;
 
 use OC\DB\QueryBuilder\Literal;
@@ -45,7 +25,7 @@ class DBLockingProvider extends AbstractLockingProvider {
 		private IDBConnection $connection,
 		private ITimeFactory $timeFactory,
 		int $ttl = 3600,
-		private bool $cacheSharedLocks = true
+		private bool $cacheSharedLocks = true,
 	) {
 		parent::__construct($ttl);
 	}
@@ -58,6 +38,7 @@ class DBLockingProvider extends AbstractLockingProvider {
 	}
 
 	/** @inheritDoc */
+	#[\Override]
 	protected function markAcquire(string $path, int $targetType): void {
 		parent::markAcquire($path, $targetType);
 		if ($this->cacheSharedLocks) {
@@ -70,6 +51,7 @@ class DBLockingProvider extends AbstractLockingProvider {
 	/**
 	 * Change the type of an existing tracked lock
 	 */
+	#[\Override]
 	protected function markChange(string $path, int $targetType): void {
 		parent::markChange($path, $targetType);
 		if ($this->cacheSharedLocks) {
@@ -98,6 +80,7 @@ class DBLockingProvider extends AbstractLockingProvider {
 	}
 
 	/** @inheritDoc */
+	#[\Override]
 	public function isLocked(string $path, int $type): bool {
 		if ($this->hasAcquiredLock($path, $type)) {
 			return true;
@@ -123,6 +106,7 @@ class DBLockingProvider extends AbstractLockingProvider {
 	}
 
 	/** @inheritDoc */
+	#[\Override]
 	public function acquireLock(string $path, int $type, ?string $readablePath = null): void {
 		$expire = $this->getExpireTime();
 		if ($type === self::LOCK_SHARED) {
@@ -163,6 +147,7 @@ class DBLockingProvider extends AbstractLockingProvider {
 	}
 
 	/** @inheritDoc */
+	#[\Override]
 	public function releaseLock(string $path, int $type): void {
 		$this->markRelease($path, $type);
 
@@ -185,6 +170,7 @@ class DBLockingProvider extends AbstractLockingProvider {
 	}
 
 	/** @inheritDoc */
+	#[\Override]
 	public function changeLock(string $path, int $targetType): void {
 		$expire = $this->getExpireTime();
 		if ($targetType === self::LOCK_SHARED) {
@@ -197,7 +183,7 @@ class DBLockingProvider extends AbstractLockingProvider {
 					$qb->expr()->eq('lock', $qb->createNamedParameter(-1, IQueryBuilder::PARAM_INT))
 				))->executeStatement();
 		} else {
-			// since we only keep one shared lock in the db we need to check if we have more then one shared lock locally manually
+			// since we only keep one shared lock in the db we need to check if we have more than one shared lock locally manually
 			if (isset($this->acquiredLocks['shared'][$path]) && $this->acquiredLocks['shared'][$path] > 1) {
 				throw new LockedException($path);
 			}
@@ -233,6 +219,7 @@ class DBLockingProvider extends AbstractLockingProvider {
 	}
 
 	/** @inheritDoc */
+	#[\Override]
 	public function releaseAll(): void {
 		parent::releaseAll();
 

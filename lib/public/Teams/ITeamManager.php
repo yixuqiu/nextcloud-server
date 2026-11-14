@@ -1,23 +1,8 @@
 <?php
+
 /**
- * @copyright Copyright (c) 2024 Julius Härtl <jus@bitgrid.net>
- *
- * @author Julius Härtl <jus@bitgrid.net>
- *
- * @license GNU AGPL version 3 or any later version
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
+ * SPDX-FileCopyrightText: 2024 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
 namespace OCP\Teams;
@@ -42,9 +27,17 @@ interface ITeamManager {
 	public function getProvider(string $providerId): ITeamResourceProvider;
 
 	/**
+	 * Get the registered provider of exclusive team folders.
+	 *
+	 * @return ITeamFolderProvider|null Null when no folder provider is enabled.
+	 * @since 35.0.0
+	 */
+	public function getTeamFolderProvider(): ?ITeamFolderProvider;
+
+	/**
 	 * Returns all team resources for a given team and user
 	 *
-	 * @return TeamResource[]
+	 * @return list<TeamResource>
 	 * @since 29.0.0
 	 */
 	public function getSharedWith(string $teamId, string $userId): array;
@@ -55,4 +48,45 @@ interface ITeamManager {
 	 * @since 29.0.0
 	 */
 	public function getTeamsForResource(string $providerId, string $resourceId, string $userId): array;
+
+	/**
+	 * Returns all team resources for the given teams, user and resource
+	 *
+	 * @return array<string, list<TeamResource>>
+	 * @since 33.0.0
+	 * @since 34.0.0 Added $resourceId param
+	 */
+	public function getSharedWithList(array $teams, string $userId, string $resourceId): array;
+
+	/**
+	 * Returns all teams that a given user is a member of
+	 *
+	 * @return list<Team>
+	 * @since 33.0.0
+	 */
+	public function getTeamsForUser(string $userId): array;
+
+	/**
+	 * Returns a mapping of user ID to display name for all members of a given team.
+	 *
+	 * @param string $teamId ID of the team whose members are being queried
+	 * @param string $userId ID of the user from whose point of view the members are being queried
+	 *
+	 * @return array<string, string> userId => displayName
+	 * @since 34.0.0
+	 */
+	public function getMembersOfTeam(string $teamId, string $userId): array;
+
+	/**
+	 * Returns whether the Teams backend is available
+	 *
+	 * @return bool
+	 * @since 34.0.0
+	 */
+	public function hasTeamSupport(): bool;
+
+	/**
+	 * @since 35.0.0
+	 */
+	public function getTeam(string $teamId, ?string $userId = null): ?Team;
 }

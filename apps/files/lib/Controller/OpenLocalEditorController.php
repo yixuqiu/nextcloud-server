@@ -3,102 +3,81 @@
 declare(strict_types=1);
 
 /**
- * @copyright Copyright (c) 2022 Joas Schilling <coding@schilljs.com>
- *
- * @author Joas Schilling <coding@schilljs.com>
- *
- * @license GNU AGPL version 3 or any later version
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
- *
+ * SPDX-FileCopyrightText: 2022 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
 namespace OCA\Files\Controller;
 
+use NCU\AppFramework\Http\Attribute\TokenScope;
 use OCA\Files\Db\OpenLocalEditor;
 use OCA\Files\Db\OpenLocalEditorMapper;
+use OCA\Files\TokenScopes;
 use OCP\AppFramework\Db\DoesNotExistException;
 use OCP\AppFramework\Http;
+use OCP\AppFramework\Http\Attribute\BruteForceProtection;
+use OCP\AppFramework\Http\Attribute\NoAdminRequired;
+use OCP\AppFramework\Http\Attribute\UserRateLimit;
 use OCP\AppFramework\Http\DataResponse;
 use OCP\AppFramework\OCSController;
 use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\DB\Exception;
 use OCP\IRequest;
+use OCP\IUser;
 use OCP\Security\ISecureRandom;
 use Psr\Log\LoggerInterface;
 
-class OpenLocalEditorController extends OCSController {
-	public const TOKEN_LENGTH = 128;
-	public const TOKEN_DURATION = 600; // 10 Minutes
-	public const TOKEN_RETRIES = 50;
+#[TokenScope(scope: TokenScopes::FILES_WRITE)]
+final class OpenLocalEditorController extends OCSController {
+	public const int TOKEN_LENGTH = 128;
 
-	protected ITimeFactory $timeFactory;
-	protected OpenLocalEditorMapper $mapper;
-	protected ISecureRandom $secureRandom;
-	protected LoggerInterface $logger;
-	protected ?string $userId;
+	// 10 Minutes
+	public const int TOKEN_DURATION = 600;
+
+	public const int TOKEN_RETRIES = 50;
 
 	public function __construct(
 		string $appName,
 		IRequest $request,
-		ITimeFactory $timeFactory,
-		OpenLocalEditorMapper $mapper,
-		ISecureRandom $secureRandom,
-		LoggerInterface $logger,
-		?string $userId
+		private readonly ITimeFactory $timeFactory,
+		private readonly OpenLocalEditorMapper $mapper,
+		private readonly ISecureRandom $secureRandom,
+		private readonly LoggerInterface $logger,
 	) {
 		parent::__construct($appName, $request);
-
-		$this->timeFactory = $timeFactory;
-		$this->mapper = $mapper;
-		$this->secureRandom = $secureRandom;
-		$this->logger = $logger;
-		$this->userId = $userId;
 	}
 
 	/**
-	 * @NoAdminRequired
-	 * @UserRateThrottle(limit=10, period=120)
-	 *
 	 * Create a local editor
 	 *
-	 * @param string $path Path of the file
+	 * @param non-empty-string $path Path of the file
 	 *
-	 * @return DataResponse<Http::STATUS_OK, array{userId: ?string, pathHash: string, expirationTime: int, token: string}, array{}>|DataResponse<Http::STATUS_INTERNAL_SERVER_ERROR, array<empty>, array{}>
+	 * @return DataResponse<Http::STATUS_OK, array{userId: ?string, pathHash: string, expirationTime: int, token: string}, array{}>|DataResponse<Http::STATUS_INTERNAL_SERVER_ERROR, list<empty>, array{}>
 	 *
 	 * 200: Local editor returned
 	 */
-	public function create(string $path): DataResponse {
+	#[NoAdminRequired]
+	#[UserRateLimit(limit: 10, period: 120)]
+	public function create(IUser $user, string $path): DataResponse {
 		$pathHash = sha1($path);
 
 		$entity = new OpenLocalEditor();
-		$entity->setUserId($this->userId);
-		$entity->setPathHash($pathHash);
-		$entity->setExpirationTime($this->timeFactory->getTime() + self::TOKEN_DURATION); // Expire in 10 minutes
+		$entity->userId = $user->getUID();
+		$entity->pathHash = $pathHash;
+		$entity->expirationTime = $this->timeFactory->getTime() + self::TOKEN_DURATION; // Expire in 10 minutes
 
-		for ($i = 1; $i <= self::TOKEN_RETRIES; $i++) {
+		for ($i = 1; $i <= self::TOKEN_RETRIES; ++$i) {
 			$token = $this->secureRandom->generate(self::TOKEN_LENGTH, ISecureRandom::CHAR_ALPHANUMERIC);
-			$entity->setToken($token);
+			$entity->token = $token;
 
 			try {
 				$this->mapper->insert($entity);
 
 				return new DataResponse([
-					'userId' => $this->userId,
+					'userId' => $user->getUID(),
 					'pathHash' => $pathHash,
-					'expirationTime' => $entity->getExpirationTime(),
-					'token' => $entity->getToken(),
+					'expirationTime' => $entity->expirationTime,
+					'token' => $entity->token,
 				]);
 			} catch (Exception $e) {
 				if ($e->getCode() !== Exception::REASON_UNIQUE_CONSTRAINT_VIOLATION) {
@@ -113,44 +92,42 @@ class OpenLocalEditorController extends OCSController {
 	}
 
 	/**
-	 * @NoAdminRequired
-	 * @BruteForceProtection(action=openLocalEditor)
-	 *
 	 * Validate a local editor
 	 *
-	 * @param string $path Path of the file
-	 * @param string $token Token of the local editor
+	 * @param non-empty-string $path Path of the file
+	 * @param non-empty-string $token Token of the local editor
 	 *
-	 * @return DataResponse<Http::STATUS_OK, array{userId: string, pathHash: string, expirationTime: int, token: string}, array{}>|DataResponse<Http::STATUS_NOT_FOUND, array<empty>, array{}>
+	 * @return DataResponse<Http::STATUS_OK, array{userId: string, pathHash: string, expirationTime: int, token: string}, array{}>|DataResponse<Http::STATUS_NOT_FOUND, list<empty>, array{}>
 	 *
 	 * 200: Local editor validated successfully
 	 * 404: Local editor not found
 	 */
-	public function validate(string $path, string $token): DataResponse {
+	#[NoAdminRequired]
+	#[BruteForceProtection(action: 'openLocalEditor')]
+	public function validate(IUser $user, string $path, string $token): DataResponse {
 		$pathHash = sha1($path);
 
 		try {
-			$entity = $this->mapper->verifyToken($this->userId, $pathHash, $token);
-		} catch (DoesNotExistException $e) {
+			$entity = $this->mapper->verifyToken($user->getUID(), $pathHash, $token);
+		} catch (DoesNotExistException) {
 			$response = new DataResponse([], Http::STATUS_NOT_FOUND);
-			$response->throttle(['userId' => $this->userId, 'pathHash' => $pathHash]);
+			$response->throttle(['userId' => $user->getUID(), 'pathHash' => $pathHash]);
 			return $response;
 		}
 
 		$this->mapper->delete($entity);
 
-		if ($entity->getExpirationTime() <= $this->timeFactory->getTime()) {
+		if ($entity->expirationTime <= $this->timeFactory->getTime()) {
 			$response = new DataResponse([], Http::STATUS_NOT_FOUND);
-			$response->throttle(['userId' => $this->userId, 'pathHash' => $pathHash]);
+			$response->throttle(['userId' => $user->getUID(), 'pathHash' => $pathHash]);
 			return $response;
 		}
 
 		return new DataResponse([
-			'userId' => $this->userId,
+			'userId' => $user->getUID(),
 			'pathHash' => $pathHash,
-			'expirationTime' => $entity->getExpirationTime(),
-			'token' => $entity->getToken(),
+			'expirationTime' => $entity->expirationTime,
+			'token' => $entity->token,
 		]);
 	}
-
 }

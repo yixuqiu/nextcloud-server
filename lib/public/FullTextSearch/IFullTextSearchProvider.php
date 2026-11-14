@@ -1,29 +1,11 @@
 <?php
 
 declare(strict_types=1);
-
 /**
- * @copyright 2018
- *
- * @author Maxence Lange <maxence@artificial-owl.com>
- * @author Roeland Jago Douma <roeland@famdouma.nl>
- *
- * @license GNU AGPL version 3 or any later version
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
- *
+ * SPDX-FileCopyrightText: 2018 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
+
 namespace OCP\FullTextSearch;
 
 use OCP\FullTextSearch\Model\IIndex;
@@ -81,7 +63,6 @@ interface IFullTextSearchProvider {
 	 */
 	public function getId(): string;
 
-
 	/**
 	 * Must returns a descriptive name of the Content Provider.
 	 * This is used in multiple places, so better use a clear display name.
@@ -91,7 +72,6 @@ interface IFullTextSearchProvider {
 	 * @return string
 	 */
 	public function getName(): string;
-
 
 	/**
 	 * Should returns the current configuration of the Content Provider.
@@ -103,7 +83,6 @@ interface IFullTextSearchProvider {
 	 * @return array
 	 */
 	public function getConfiguration(): array;
-
 
 	/**
 	 * Must returns a ISearchTemplate that contains displayable items and
@@ -117,14 +96,12 @@ interface IFullTextSearchProvider {
 	 */
 	public function getSearchTemplate(): ISearchTemplate;
 
-
 	/**
 	 * Called when FullTextSearch is loading your Content Provider.
 	 *
 	 * @since 15.0.0
 	 */
 	public function loadProvider();
-
 
 	/**
 	 * Set the wrapper of the currently executed process.
@@ -142,7 +119,6 @@ interface IFullTextSearchProvider {
 	 */
 	public function setRunner(IRunner $runner);
 
-
 	/**
 	 * This method is called when the administrator specify options when running
 	 * the ./occ fulltextsearch:index or ./occ fulltextsearch:live
@@ -152,7 +128,6 @@ interface IFullTextSearchProvider {
 	 * @param IIndexOptions $options
 	 */
 	public function setIndexOptions(IIndexOptions $options);
-
 
 	/**
 	 * Allow the provider to generate a list of chunk to split a huge list of
@@ -170,7 +145,6 @@ interface IFullTextSearchProvider {
 	 * @return string[]
 	 */
 	public function generateChunks(string $userId): array;
-
 
 	/**
 	 * Returns all indexable document for a user as an array of IIndexDocument.
@@ -197,7 +171,6 @@ interface IFullTextSearchProvider {
 	 */
 	public function generateIndexableDocuments(string $userId, string $chunk): array;
 
-
 	/**
 	 * Called to verify that the document is not already indexed and that the
 	 * old index is not up-to-date, using the IIndex from
@@ -215,7 +188,6 @@ interface IFullTextSearchProvider {
 	 */
 	public function isDocumentUpToDate(IIndexDocument $document): bool;
 
-
 	/**
 	 * Must fill IIndexDocument with all information relative to the document,
 	 * before its indexing by the Search Platform.
@@ -230,7 +202,6 @@ interface IFullTextSearchProvider {
 	 * @param IIndexDocument $document
 	 */
 	public function fillIndexDocument(IIndexDocument $document);
-
 
 	/**
 	 * The Search Provider must create and return an IIndexDocument
@@ -248,7 +219,6 @@ interface IFullTextSearchProvider {
 	 */
 	public function updateDocument(IIndex $index): IIndexDocument;
 
-
 	/**
 	 * Called when an index is initiated by the administrator.
 	 * This is should only be used in case of a specific mapping is needed.
@@ -260,7 +230,6 @@ interface IFullTextSearchProvider {
 	 */
 	public function onInitializingIndex(IFullTextSearchPlatform $platform);
 
-
 	/**
 	 * Called when administrator is resetting the index.
 	 * This is should only be used in case of a specific mapping has been
@@ -271,7 +240,6 @@ interface IFullTextSearchProvider {
 	 * @param IFullTextSearchPlatform $platform
 	 */
 	public function onResettingIndex(IFullTextSearchPlatform $platform);
-
 
 	/**
 	 * Method is called when a search request is initiated by a user, prior to
@@ -288,7 +256,6 @@ interface IFullTextSearchProvider {
 	 */
 	public function improveSearchRequest(ISearchRequest $searchRequest);
 
-
 	/**
 	 * Method is called after results of a search are returned by the
 	 * Search Platform.
@@ -303,7 +270,6 @@ interface IFullTextSearchProvider {
 	 * @param ISearchResult $searchResult
 	 */
 	public function improveSearchResult(ISearchResult $searchResult);
-
 
 	/**
 	 * not used yet.

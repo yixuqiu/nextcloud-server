@@ -3,24 +3,8 @@
 declare(strict_types=1);
 
 /**
- * @copyright Copyright (c) 2023 Marcel Klehr <mklehr@gmx.net>
- *
- * @author Marcel Klehr <mklehr@gmx.net>
- *
- * @license GNU AGPL version 3 or any later version
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
+ * SPDX-FileCopyrightText: 2023 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
 namespace OC\TextProcessing\Db;
@@ -62,13 +46,12 @@ class Task extends Entity {
 	/**
 	 * @var string[]
 	 */
-	public static array $columns = ['id', 'last_updated', 'type', 'input', 'output', 'status', 'user_id', 'app_id', 'identifier', 'completion_expected_at'];
+	public const COLUMNS = ['id', 'last_updated', 'type', 'input', 'output', 'status', 'user_id', 'app_id', 'identifier', 'completion_expected_at'];
 
 	/**
 	 * @var string[]
 	 */
-	public static array $fields = ['id', 'lastUpdated', 'type', 'input', 'output', 'status', 'userId', 'appId', 'identifier', 'completionExpectedAt'];
-
+	public const FIELDS = ['id', 'lastUpdated', 'type', 'input', 'output', 'status', 'userId', 'appId', 'identifier', 'completionExpectedAt'];
 
 	public function __construct() {
 		// add types in constructor
@@ -85,9 +68,9 @@ class Task extends Entity {
 	}
 
 	public function toRow(): array {
-		return array_combine(self::$columns, array_map(function ($field) {
-			return $this->{'get'.ucfirst($field)}();
-		}, self::$fields));
+		return array_combine(self::COLUMNS, array_map(function ($field) {
+			return $this->{'get' . ucfirst($field)}();
+		}, self::FIELDS));
 	}
 
 	public static function fromPublicTask(OCPTask $task): Task {

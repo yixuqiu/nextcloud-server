@@ -1,28 +1,8 @@
 <?php
+
 /**
- * @copyright Copyright (c) 2016 Arthur Schiwon <blizzz@arthur-schiwon.de>
- *
- * @author Arthur Schiwon <blizzz@arthur-schiwon.de>
- * @author Christoph Wurst <christoph@winzerhof-wurst.at>
- * @author Joas Schilling <coding@schilljs.com>
- * @author Lukas Reschke <lukas@statuscode.ch>
- * @author Kate Döen <kate.doeen@nextcloud.com>
- *
- * @license GNU AGPL version 3 or any later version
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
- *
+ * SPDX-FileCopyrightText: 2016 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
 namespace OCP\Settings;
@@ -68,18 +48,28 @@ interface IManager {
 	public const SETTINGS_PERSONAL = 'personal';
 
 	/**
+	 * @since 33.0.0
+	 * For settings only used for delegation but not appearing in settings menu
+	 */
+	public const SETTINGS_DELEGATION = 'delegation';
+
+	/**
 	 * @psalm-param self::SETTINGS_* $type
 	 * @param class-string<IIconSection> $section
+	 * @param ?string $appId app the section belongs to, so personal sections of
+	 *                       apps not enabled for the user can be hidden (since 35.0.0)
 	 * @since 14.0.0
 	 */
-	public function registerSection(string $type, string $section);
+	public function registerSection(string $type, string $section, ?string $appId = null);
 
 	/**
 	 * @psalm-param self::SETTINGS_* $type
 	 * @param class-string<ISettings> $setting
+	 * @param ?string $appId app the setting belongs to, so personal settings of
+	 *                       apps not enabled for the user can be hidden (since 35.0.0)
 	 * @since 14.0.0
 	 */
-	public function registerSetting(string $type, string $setting);
+	public function registerSetting(string $type, string $setting, ?string $appId = null);
 
 	/**
 	 * returns a list of the admin sections
@@ -110,7 +100,7 @@ interface IManager {
 	/**
 	 * Returns a list of admin settings that the given user can use for the give section
 	 *
-	 * @return array<int, list<ISettings>> The array of admin settings there admin delegation is allowed.
+	 * @return array<int, list<ISettings>> List of admin-settings the user has access to, with priority as key.
 	 * @since 23.0.0
 	 */
 	public function getAllowedAdminSettings(string $section, IUser $user): array;
@@ -138,4 +128,11 @@ interface IManager {
 	 * @since 25.0.0
 	 */
 	public function getSection(string $type, string $sectionId): ?IIconSection;
+
+	/**
+	 * Return admin delegated settings, sorted by priority and grouped by section
+	 * @return array<string, array{section:IIconSection,settings:list<IDelegatedSettings>}>
+	 * @since 33.0.0
+	 */
+	public function getAdminDelegatedSettings(): array;
 }

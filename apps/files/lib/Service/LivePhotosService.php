@@ -2,28 +2,13 @@
 
 declare(strict_types=1);
 /**
- * @copyright Copyright (c) 2024 Louis Chemineau <louis@chmn.me>
- *
- * @author Louis Chemineau <louis@chmn.me>
- *
- * @license GNU AGPL version 3 or any later version
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
+ * SPDX-FileCopyrightText: 2024 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
 namespace OCA\Files\Service;
 
+use OCP\Files\Node;
 use OCP\FilesMetadata\Exceptions\FilesMetadataNotFoundException;
 use OCP\FilesMetadata\IFilesMetadataManager;
 
@@ -36,9 +21,24 @@ class LivePhotosService {
 	/**
 	 * Get the associated live photo for a given file id
 	 */
-	public function getLivePhotoPeerId(int $fileId): ?int {
+	public function getLivePhotoPeerId(Node $file): ?int {
+		$peer = $this->getLivePhotoPeerIdUnchecked($file);
+		if ($peer === null) {
+			return null;
+		}
+
+		$peerOfPeer = $this->getLivePhotoPeerIdsUnchecked([$peer])[$peer] ?? null;
+		if ($peerOfPeer === $file->getId()) {
+			// the peer relationship is only valid if it's mutual
+			return $peer;
+		} else {
+			return null;
+		}
+	}
+
+	private function getLivePhotoPeerIdUnchecked(Node $file): ?int {
 		try {
-			$metadata = $this->filesMetadataManager->getMetadata($fileId);
+			$metadata = $this->filesMetadataManager->getMetadataForNode($file);
 		} catch (FilesMetadataNotFoundException $ex) {
 			return null;
 		}
@@ -48,5 +48,31 @@ class LivePhotosService {
 		}
 
 		return (int)$metadata->getString('files-live-photo');
+	}
+
+	/**
+	 * Get the associated live photo for multiple file ids
+	 * @param int[] $fileIds
+	 * @return array<int, int>
+	 */
+	public function getLivePhotoPeerIds(array $fileIds): array {
+		$peersIds = $this->getLivePhotoPeerIdsUnchecked($fileIds);
+		$peersOfPeers = $this->getLivePhotoPeerIdsUnchecked($peersIds);
+
+		// the peer relationship is only valid if it's mutual
+		return array_filter($peersIds, fn (int $peerId, int $fileId) => ($peersOfPeers[$peerId] ?? null) === $fileId, ARRAY_FILTER_USE_BOTH);
+	}
+
+	private function getLivePhotoPeerIdsUnchecked(array $fileIds): array {
+		$metadata = $this->filesMetadataManager->getMetadataForFiles($fileIds);
+		$peersIds = [];
+		foreach ($metadata as $fileId => $item) {
+			if (!$item->hasKey('files-live-photo')) {
+				continue;
+			}
+
+			$peersIds[$fileId] = (int)$item->getString('files-live-photo');
+		}
+		return $peersIds;
 	}
 }

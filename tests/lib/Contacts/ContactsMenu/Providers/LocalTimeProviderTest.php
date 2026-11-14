@@ -3,25 +3,8 @@
 declare(strict_types=1);
 
 /**
- * @copyright Copyright (c) 2023, Joas Schilling <coding@schilljs.com>
- *
- * @author Joas Schilling <coding@schilljs.com>
- *
- * @license GNU AGPL version 3 or any later version
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
- *
+ * SPDX-FileCopyrightText: 2023 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
 namespace lib\Contacts\ContactsMenu\Providers;
@@ -33,63 +16,59 @@ use OCP\Contacts\ContactsMenu\IEntry;
 use OCP\Contacts\ContactsMenu\ILinkAction;
 use OCP\IConfig;
 use OCP\IDateTimeFormatter;
-use OCP\IL10N;
 use OCP\IURLGenerator;
 use OCP\IUser;
 use OCP\IUserManager;
-use OCP\L10N\IFactory as IL10NFactory;
-use PHPUnit\Framework\MockObject\MockObject;
+use OCP\IUserSession;
 use Test\TestCase;
 
 class LocalTimeProviderTest extends TestCase {
-	/** @var IActionFactory|MockObject */
-	private $actionFactory;
-	/** @var IL10N|MockObject */
-	private $l;
-	/** @var IL10NFactory|MockObject */
-	private $l10nFactory;
-	/** @var IURLGenerator|MockObject */
-	private $urlGenerator;
-	/** @var IUserManager|MockObject */
-	private $userManager;
-	/** @var ITimeFactory|MockObject */
-	private $timeFactory;
-	/** @var IDateTimeFormatter|MockObject */
-	private $dateTimeFormatter;
-	/** @var IConfig|MockObject */
-	private $config;
-
 	private LocalTimeProvider $provider;
 
+	#[\Override]
 	protected function setUp(): void {
 		parent::setUp();
 
-		$this->actionFactory = $this->createMock(IActionFactory::class);
-		$this->l10nFactory = $this->createMock(IL10NFactory::class);
-		$this->l = $this->createMock(IL10N::class);
-		$this->l->expects($this->any())
-			->method('t')
-			->will($this->returnCallback(function ($text, $parameters = []) {
-				return vsprintf($text, $parameters);
-			}));
-		$this->urlGenerator = $this->createMock(IURLGenerator::class);
-		$this->userManager = $this->createMock(IUserManager::class);
-		$this->timeFactory = $this->createMock(ITimeFactory::class);
-		$this->dateTimeFormatter = $this->createMock(IDateTimeFormatter::class);
-		$this->config = $this->createMock(IConfig::class);
-
-		$this->provider = new LocalTimeProvider(
-			$this->actionFactory,
-			$this->l10nFactory,
-			$this->urlGenerator,
-			$this->userManager,
-			$this->timeFactory,
-			$this->dateTimeFormatter,
-			$this->config
-		);
+		$this->provider = $this->createInstanceWithMocks(LocalTimeProvider::class);
 	}
 
-	public function testProcess(): void {
+	public static function dataTestProcess(): array {
+		return [
+			'no current user' => [
+				false,
+				null,
+				null,
+				'Local time: 10:24',
+			],
+			'both UTC' => [
+				true,
+				null,
+				null,
+				'10:24 • same time',
+			],
+			'both same time zone' => [
+				true,
+				'Europe/Berlin',
+				'Europe/Berlin',
+				'11:24 • same time',
+			],
+			'1h behind' => [
+				true,
+				'Europe/Berlin',
+				'Europe/London',
+				'10:24 • 1h behind',
+			],
+			'4:45h ahead' => [
+				true,
+				'Europe/Berlin',
+				'Asia/Kathmandu',
+				'16:09 • 4h45m ahead',
+			],
+		];
+	}
+
+	#[\PHPUnit\Framework\Attributes\DataProvider('dataTestProcess')]
+	public function testProcess(bool $hasCurrentUser, ?string $currentUserTZ, ?string $targetUserTZ, string $expected): void {
 		$entry = $this->createMock(IEntry::class);
 		$entry->expects($this->once())
 			->method('getProperty')
@@ -99,40 +78,47 @@ class LocalTimeProviderTest extends TestCase {
 		$user = $this->createMock(IUser::class);
 		$user->method('getUID')
 			->willReturn('user1');
-		$this->userManager->expects($this->once())
+		$this->getAutoMock(IUserManager::class)->expects($this->once())
 			->method('get')
 			->with('user1')
 			->willReturn($user);
 
-		$this->l10nFactory->method('get')
-			->with('lib')
-			->willReturn($this->l);
+		$this->getAutoMock(IConfig::class)->method('getSystemValueString')
+			->with('default_timezone', 'UTC')
+			->willReturn('UTC');
+		$this->getAutoMock(IConfig::class)
+			->method('getUserValue')
+			->willReturnMap([
+				['user1', 'core', 'timezone', '', $targetUserTZ],
+				['currentUser', 'core', 'timezone', '', $currentUserTZ],
+			]);
 
-		$this->config->method('getUserValue')
-			->with('user1', 'core', 'timezone')
-			->willReturn('America/Los_Angeles');
+		if ($hasCurrentUser) {
+			$currentUser = $this->createMock(IUser::class);
+			$currentUser->method('getUID')
+				->willReturn('currentUser');
+			$this->getAutoMock(IUserSession::class)->method('getUser')
+				->willReturn($currentUser);
+		}
 
-		$now = new \DateTime('2023-01-04 10:24:43');
-		$this->timeFactory->method('getDateTime')
-			->willReturn($now);
+		$this->getAutoMock(ITimeFactory::class)->method('getDateTime')
+			->willReturnCallback(fn ($time, $tz) => (new \DateTime('2023-01-04 10:24:43', new \DateTimeZone('UTC')))->setTimezone($tz));
 
-		$now = new \DateTime('2023-01-04 10:24:43');
-		$this->dateTimeFormatter->method('formatTime')
-			->with($now, 'short', $this->anything())
-			->willReturn('01:24');
+		$this->getAutoMock(IDateTimeFormatter::class)->method('formatTime')
+			->willReturnCallback(fn (\DateTime $time) => $time->format('H:i'));
 
-		$this->urlGenerator->method('imagePath')
+		$this->getAutoMock(IURLGenerator::class)->method('imagePath')
 			->willReturn('actions/recent.svg');
-		$this->urlGenerator->method('getAbsoluteURL')
+		$this->getAutoMock(IURLGenerator::class)->method('getAbsoluteURL')
 			->with('actions/recent.svg')
 			->willReturn('https://localhost/actions/recent.svg');
 
 		$action = $this->createMock(ILinkAction::class);
-		$this->actionFactory->expects($this->once())
+		$this->getAutoMock(IActionFactory::class)->expects($this->once())
 			->method('newLinkAction')
 			->with(
 				'https://localhost/actions/recent.svg',
-				'Local time: 01:24',
+				$expected,
 				'#',
 				'timezone'
 			)
@@ -151,10 +137,6 @@ class LocalTimeProviderTest extends TestCase {
 			->method('getProperty')
 			->with('UID')
 			->willReturn('user1');
-
-		$user = $this->createMock(IUser::class);
-		$user->method('getUID')
-			->willReturn(null);
 
 		$entry->expects($this->never())
 			->method('addAction');

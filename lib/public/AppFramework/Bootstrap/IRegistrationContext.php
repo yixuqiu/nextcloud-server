@@ -3,28 +3,8 @@
 declare(strict_types=1);
 
 /**
- * @copyright 2020 Christoph Wurst <christoph@winzerhof-wurst.at>
- *
- * @author Christoph Wurst <christoph@winzerhof-wurst.at>
- * @author Joas Schilling <coding@schilljs.com>
- * @author Julius Härtl <jus@bitgrid.net>
- * @author Roeland Jago Douma <roeland@famdouma.nl>
- *
- * @license GNU AGPL version 3 or any later version
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
- *
+ * SPDX-FileCopyrightText: 2020 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
 namespace OCP\AppFramework\Bootstrap;
@@ -36,7 +16,9 @@ use OCP\Capabilities\ICapability;
 use OCP\Collaboration\Reference\IReferenceProvider;
 use OCP\EventDispatcher\IEventDispatcher;
 use OCP\Files\Template\ICustomTemplateProvider;
+use OCP\GlobalScale\IGlobalScaleService;
 use OCP\IContainer;
+use OCP\Mail\Provider\IProvider as IMailProvider;
 use OCP\Notification\INotifier;
 use OCP\Preview\IProviderV2;
 use OCP\SpeechToText\ISpeechToTextProvider;
@@ -87,8 +69,8 @@ interface IRegistrationContext {
 	 *
 	 * @param string $name
 	 * @param callable $factory
-	 * @psalm-param callable(\Psr\Container\ContainerInterface): mixed $factory
-	 * @param bool $shared
+	 * @psalm-param callable(IContainer): mixed $factory
+	 * @param bool $shared If set to true the factory result will be cached otherwise every query will call the factory again
 	 *
 	 * @return void
 	 * @see IContainer::registerService()
@@ -98,13 +80,12 @@ interface IRegistrationContext {
 	public function registerService(string $name, callable $factory, bool $shared = true): void;
 
 	/**
-	 * @param string $alias
-	 * @psalm-param string|class-string $alias
-	 * @param string $target
-	 * @psalm-param string|class-string $target
+	 * Shortcut for returning a service from a service under a different key,
+	 * e.g. to tell the container to return a class when queried for an
+	 * interface
 	 *
-	 * @return void
-	 * @see IContainer::registerAlias()
+	 * @psalm-param string|class-string $alias
+	 * @psalm-param string|class-string $target
 	 *
 	 * @since 20.0.0
 	 */
@@ -170,6 +151,22 @@ interface IRegistrationContext {
 	public function registerSearchProvider(string $class): void;
 
 	/**
+	 * Register an account-scoped search provider
+	 *
+	 * Unlike a unified search provider, this searches on behalf of an account passed explicitly
+	 * rather than the calling session, and returns structured metadata rather than display strings.
+	 * `\NCU\Search\IAccountScopedSearchProvider` is currently experimental and may still change.
+	 *
+	 * @param string $class
+	 * @psalm-param class-string<\NCU\Search\IAccountScopedSearchProvider> $class
+	 *
+	 * @return void
+	 *
+	 * @since 36.0.0
+	 */
+	public function registerAccountScopedSearchProvider(string $class): void;
+
+	/**
 	 * Register an alternative login option
 	 *
 	 * It is allowed to register more than one option per app.
@@ -180,8 +177,20 @@ interface IRegistrationContext {
 	 * @return void
 	 *
 	 * @since 20.0.0
+	 * @deprecated 34.0.0 Use registerAlternativeLoginProvider instead.
 	 */
 	public function registerAlternativeLogin(string $class): void;
+
+	/**
+	 * Register an alternative login options provider
+	 *
+	 * It is allowed to register more than one option per app.
+	 *
+	 * @param class-string<\OCP\Authentication\IAlternativeLoginProvider> $class
+	 *
+	 * @since 34.0.0
+	 */
+	public function registerAlternativeLoginProvider(string $class): void;
 
 	/**
 	 * Register an initialstate provider
@@ -334,9 +343,7 @@ interface IRegistrationContext {
 	/**
 	 * Register a resource backend for the DAV server
 	 *
-	 * @param string $actionClass
-	 * @psalm-param class-string<\OCP\Calendar\Resource\IBackend> $actionClass
-	 * @return void
+	 * @param class-string<\OCP\Calendar\Resource\IBackend> $class
 	 * @since 24.0.0
 	 */
 	public function registerCalendarResourceBackend(string $class): void;
@@ -344,17 +351,13 @@ interface IRegistrationContext {
 	/**
 	 * Register a room backend for the DAV server
 	 *
-	 * @param string $actionClass
-	 * @psalm-param class-string<\OCP\Calendar\Room\IBackend> $actionClass
-	 * @return void
+	 * @param class-string<\OCP\Calendar\Room\IBackend> $class
 	 * @since 24.0.0
 	 */
 	public function registerCalendarRoomBackend(string $class): void;
 
 	/**
-	 * @param string $class
-	 * @psalm-param class-string<\OCP\Calendar\Room\IBackend> $actionClass
-	 * @return void
+	 * @param class-string<\OCP\Teams\ITeamResourceProvider> $class
 	 * @since 29.0.0
 	 */
 	public function registerTeamResourceProvider(string $class): void;
@@ -378,6 +381,7 @@ interface IRegistrationContext {
 	 * @param string[] $methods
 	 * @return void
 	 * @since 25.0.0
+	 * @deprecated 36.0.0 use \SensitiveParameter attribute instead
 	 */
 	public function registerSensitiveMethods(string $class, array $methods): void;
 
@@ -401,6 +405,15 @@ interface IRegistrationContext {
 	public function registerSetupCheck(string $setupCheckClass): void;
 
 	/**
+	 * Register an implementation of \OCP\SystemReport\ISystemReportSection that
+	 * will contribute a section to the system report
+	 *
+	 * @param class-string<\OCP\SystemReport\ISystemReportSection> $sectionClass
+	 * @since 36.0.0
+	 */
+	public function registerSystemReportSection(string $sectionClass): void;
+
+	/**
 	 * Register an implementation of \OCP\Settings\IDeclarativeSettings that
 	 * will handle the implementation of declarative settings
 	 *
@@ -410,4 +423,67 @@ interface IRegistrationContext {
 	 * @since 29.0.0
 	 */
 	public function registerDeclarativeSettings(string $declarativeSettingsClass): void;
+
+	/**
+	 * Register an implementation of \OCP\TaskProcessing\IProvider that
+	 * will handle the implementation of task processing
+	 *
+	 * @param string $taskProcessingProviderClass
+	 * @psalm-param class-string<\OCP\TaskProcessing\IProvider> $taskProcessingProviderClass
+	 * @return void
+	 * @since 30.0.0
+	 */
+	public function registerTaskProcessingProvider(string $taskProcessingProviderClass): void;
+
+	/**
+	 * Register an implementation of \OCP\TaskProcessing\ITaskType that
+	 * will handle the implementation of a task processing type
+	 *
+	 * @param string $taskProcessingTaskTypeClass
+	 * @psalm-param class-string<\OCP\TaskProcessing\ITaskType> $taskProcessingTaskTypeClass
+	 * @return void
+	 * @since 30.0.0
+	 */
+	public function registerTaskProcessingTaskType(string $taskProcessingTaskTypeClass): void;
+
+	/**
+	 * Register an implementation of \OCP\Files\Conversion\IConversionProvider
+	 * that will handle the conversion of files from one MIME type to another
+	 *
+	 * @param string $class
+	 * @psalm-param class-string<\OCP\Files\Conversion\IConversionProvider> $class
+	 *
+	 * @return void
+	 *
+	 * @since 31.0.0
+	 */
+	public function registerFileConversionProvider(string $class): void;
+
+	/**
+	 * Register a mail provider
+	 *
+	 * @param string $class
+	 * @psalm-param class-string<IMailProvider> $class
+	 * @since 30.0.0
+	 */
+	public function registerMailProvider(string $class): void;
+
+	/**
+	 * Register an implementation of \OCP\Config\Lexicon\IConfigLexicon that
+	 * will handle the config lexicon
+	 *
+	 * @param string $configLexiconClass
+	 *
+	 * @psalm-param class-string<\OCP\Config\Lexicon\ILexicon> $configLexiconClass
+	 * @since 31.0.0
+	 */
+	public function registerConfigLexicon(string $configLexiconClass): void;
+
+	/**
+	 * Register an implementation of {@see IGlobalScaleService}.
+	 *
+	 * @param class-string<IGlobalScaleService> $globalScaleServiceClass
+	 * @since 34.0.3
+	 */
+	public function registerGlobalScaleService(string $globalScaleServiceClass): void;
 }

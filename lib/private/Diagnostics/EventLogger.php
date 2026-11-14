@@ -1,27 +1,11 @@
 <?php
+
 /**
- * @copyright Copyright (c) 2016, ownCloud, Inc.
- *
- * @author Christoph Wurst <christoph@winzerhof-wurst.at>
- * @author Morris Jobke <hey@morrisjobke.de>
- * @author Piotr Mrówczyński <mrow4a@yahoo.com>
- * @author Robin Appelman <robin@icewind.nl>
- *
- * @license AGPL-3.0
- *
- * This code is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License, version 3,
- * as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program. If not, see <http://www.gnu.org/licenses/>
- *
+ * SPDX-FileCopyrightText: 2016-2024 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-FileCopyrightText: 2016 ownCloud, Inc.
+ * SPDX-License-Identifier: AGPL-3.0-only
  */
+
 namespace OC\Diagnostics;
 
 use OC\Log;
@@ -32,27 +16,18 @@ use Psr\Log\LoggerInterface;
 
 class EventLogger implements IEventLogger {
 	/** @var Event[] */
-	private $events = [];
-
-	/** @var SystemConfig */
-	private $config;
-
-	/** @var LoggerInterface */
-	private $logger;
-
-	/** @var Log */
-	private $internalLogger;
+	private array $events = [];
 
 	/**
 	 * @var bool - Module needs to be activated by some app
 	 */
-	private $activated = false;
+	private bool $activated = false;
 
-	public function __construct(SystemConfig $config, LoggerInterface $logger, Log $internalLogger) {
-		$this->config = $config;
-		$this->logger = $logger;
-		$this->internalLogger = $internalLogger;
-
+	public function __construct(
+		private SystemConfig $config,
+		private LoggerInterface $logger,
+		private Log $internalLogger,
+	) {
 		if ($this->isLoggingActivated()) {
 			$this->activate();
 		}
@@ -66,13 +41,14 @@ class EventLogger implements IEventLogger {
 			return true;
 		}
 
-		$isDebugLevel = $this->internalLogger->getLogLevel([]) === Log::DEBUG;
+		$isDebugLevel = $this->internalLogger->getLogLevel([], '') === Log::DEBUG;
 		return $systemValue && $isDebugLevel;
 	}
 
 	/**
 	 * @inheritdoc
 	 */
+	#[\Override]
 	public function start($id, $description = '') {
 		if ($this->activated) {
 			$this->events[$id] = new Event($id, $description, microtime(true));
@@ -83,6 +59,7 @@ class EventLogger implements IEventLogger {
 	/**
 	 * @inheritdoc
 	 */
+	#[\Override]
 	public function end($id) {
 		if ($this->activated && isset($this->events[$id])) {
 			$timing = $this->events[$id];
@@ -94,6 +71,7 @@ class EventLogger implements IEventLogger {
 	/**
 	 * @inheritdoc
 	 */
+	#[\Override]
 	public function log($id, $description, $start, $end) {
 		if ($this->activated) {
 			$this->events[$id] = new Event($id, $description, $start);
@@ -105,6 +83,7 @@ class EventLogger implements IEventLogger {
 	/**
 	 * @inheritdoc
 	 */
+	#[\Override]
 	public function getEvents() {
 		return $this->events;
 	}
@@ -112,6 +91,7 @@ class EventLogger implements IEventLogger {
 	/**
 	 * @inheritdoc
 	 */
+	#[\Override]
 	public function activate() {
 		$this->activated = true;
 	}

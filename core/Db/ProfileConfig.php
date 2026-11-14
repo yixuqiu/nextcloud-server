@@ -3,31 +3,15 @@
 declare(strict_types=1);
 
 /**
- * @copyright 2021 Christopher Ng <chrng8@gmail.com>
- *
- * @author Christopher Ng <chrng8@gmail.com>
- *
- * @license GNU AGPL version 3 or any later version
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
- *
+ * SPDX-FileCopyrightText: 2021 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
 namespace OC\Core\Db;
 
 use JsonSerializable;
 use OCP\AppFramework\Db\Entity;
+use OCP\Profile\IProfileManager;
 use OCP\Profile\ParameterDoesNotExistException;
 use function json_decode;
 use function json_encode;
@@ -85,7 +69,7 @@ class ProfileConfig extends Entity implements JsonSerializable {
 		foreach ($visibilityMap as $paramId => $visibility) {
 			$config[$paramId] = array_merge(
 				$config[$paramId] ?: [],
-				['visibility' => $visibility],
+				['visibility' => $this->normalizeVisibility($visibility)],
 			);
 		}
 
@@ -114,10 +98,19 @@ class ProfileConfig extends Entity implements JsonSerializable {
 		$this->setVisibilityMap($visibilityMap);
 	}
 
+	#[\Override]
 	public function jsonSerialize(): array {
 		return [
 			'userId' => $this->userId,
 			'config' => $this->getConfigArray(),
 		];
+	}
+
+	private function normalizeVisibility(string $visibility): string {
+		return match(strtolower($visibility)) {
+			IProfileManager::VISIBILITY_SHOW => IProfileManager::VISIBILITY_SHOW,
+			IProfileManager::VISIBILITY_SHOW_USERS_ONLY => IProfileManager::VISIBILITY_SHOW_USERS_ONLY,
+			default => IProfileManager::VISIBILITY_HIDE,
+		};
 	}
 }

@@ -1,29 +1,11 @@
 <?php
+
+declare(strict_types=1);
 /**
- * @copyright Copyright (c) 2016, ownCloud GmbH.
- *
- * @author Christoph Wurst <christoph@winzerhof-wurst.at>
- * @author Georg Ehrke <oc.list@georgehrke.com>
- * @author Joas Schilling <coding@schilljs.com>
- * @author Julius Härtl <jus@bitgrid.net>
- * @author Roeland Jago Douma <roeland@famdouma.nl>
- * @author Vincent Petry <vincent@nextcloud.com>
- *
- * @license AGPL-3.0
- *
- * This code is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License, version 3,
- * as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program. If not, see <http://www.gnu.org/licenses/>
- *
+ * SPDX-FileCopyrightText: 2016 ownCloud GmbH.
+ * SPDX-License-Identifier: AGPL-3.0-only
  */
+
 namespace OCA\DAV\Tests\unit\AppInfo;
 
 use OC\App\AppManager;
@@ -45,7 +27,7 @@ class PluginManagerTest extends TestCase {
 		$server = $this->createMock(ServerContainer::class);
 
 		$appManager = $this->createMock(AppManager::class);
-		$appManager->method('getInstalledApps')
+		$appManager->method('getEnabledApps')
 			->willReturn(['adavapp', 'adavapp2']);
 
 		$appInfo1 = [
@@ -106,6 +88,8 @@ class PluginManagerTest extends TestCase {
 		$dummyCollection1 = $this->createMock(Collection::class);
 		$dummyCollection2 = $this->createMock(Collection::class);
 		$dummy2Collection1 = $this->createMock(Collection::class);
+		$dummyCollection1->method('getName')->willReturn('one');
+		$dummy2Collection1->method('getName')->willReturn('two');
 
 		$server->method('get')
 			->willReturnMap([
@@ -141,5 +125,8 @@ class PluginManagerTest extends TestCase {
 		$this->assertEquals($expectedPlugins, $pluginManager->getAppPlugins());
 		$this->assertEquals($expectedCalendarPlugins, $pluginManager->getCalendarPlugins());
 		$this->assertEquals($expectedCollections, $pluginManager->getAppCollections());
+		$this->assertSame('adavapp', $pluginManager->getCollectionApp('one'));
+		$this->assertSame('adavapp2', $pluginManager->getCollectionApp('two'));
+		$this->assertNull($pluginManager->getCollectionApp('files'));
 	}
 }

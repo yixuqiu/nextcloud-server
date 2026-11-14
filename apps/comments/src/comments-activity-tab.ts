@@ -1,81 +1,77 @@
-/**
- * @copyright Copyright (c) 2023 Ferdinand Thiessen <opensource@fthiessen.de>
- *
- * @author Ferdinand Thiessen <opensource@fthiessen.de>
- *
- * @license AGPL-3.0-or-later
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
- *
+/*!
+ * SPDX-FileCopyrightText: 2023 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
-import moment from '@nextcloud/moment'
-import Vue from 'vue'
-import logger from './logger.js'
-import { getComments } from './services/GetComments.js'
 
-let ActivityTabPluginView
-let ActivityTabPluginInstance
+import type { INode } from '@nextcloud/files'
+import type { App } from 'vue'
+
+import { createPinia } from 'pinia'
+import { createApp } from 'vue'
+import logger from './logger.ts'
+import { getComments } from './services/GetComments.ts'
 
 /**
  * Register the comments plugins for the Activity sidebar
  */
 export function registerCommentsPlugins() {
+	let app: App
+
 	window.OCA.Activity.registerSidebarAction({
-		mount: async (el, { context, fileInfo, reload }) => {
-			if (!ActivityTabPluginView) {
-				const { default: ActivityCommmentAction } = await import('./views/ActivityCommentAction.vue')
-				ActivityTabPluginView = Vue.extend(ActivityCommmentAction)
+		mount: async (el: HTMLElement, { node, reload }: { node: INode, reload: () => void }) => {
+			const pinia = createPinia()
+
+			if (!app) {
+				const { default: ActivityCommentAction } = await import('./views/ActivityCommentAction.vue')
+				app = createApp(
+					ActivityCommentAction,
+					{
+						reloadCallback: reload,
+						resourceId: node.fileid,
+					},
+				)
 			}
-			ActivityTabPluginInstance = new ActivityTabPluginView({
-				parent: context,
-				propsData: {
-					reloadCallback: reload,
-					resourceId: fileInfo.id,
-				},
-			})
-			ActivityTabPluginInstance.$mount(el)
-			logger.info('Comments plugin mounted in Activity sidebar action', { fileInfo })
+			app.use(pinia)
+			app.mount(el)
+			logger.info('Comments plugin mounted in Activity sidebar action', { node })
 		},
 		unmount: () => {
 			// destroy previous instance if available
-			if (ActivityTabPluginInstance) {
-				ActivityTabPluginInstance.$destroy()
-			}
+			app?.unmount()
+			app = undefined
 		},
 	})
 
-	window.OCA.Activity.registerSidebarEntries(async ({ fileInfo, limit, offset }) => {
-		const { data: comments } = await getComments({ resourceType: 'files', resourceId: fileInfo.id }, { limit, offset })
-		logger.debug('Loaded comments', { fileInfo, comments })
+	window.OCA.Activity.registerSidebarEntries(async ({ node, limit, offset }: { node: INode, limit?: number, offset?: number }) => {
+		const { data: comments } = await getComments(
+			{ resourceType: 'files', resourceId: node.fileid },
+			{
+				limit,
+				offset: offset ?? 0,
+			},
+		)
+		logger.debug('Loaded comments', { node, comments })
 		const { default: CommentView } = await import('./views/ActivityCommentEntry.vue')
-		const CommentsViewObject = Vue.extend(CommentView)
 
 		return comments.map((comment) => ({
-			timestamp: moment(comment.props.creationDateTime).toDate().getTime(),
-			mount(element, { context, reload }) {
-				this._CommentsViewInstance = new CommentsViewObject({
-					parent: context,
-					propsData: {
+			_CommentsViewInstance: undefined as App | undefined,
+
+			timestamp: Date.parse(comment.props?.creationDateTime as string | undefined ?? ''),
+
+			mount(element: HTMLElement, { reload }) {
+				const app = createApp(
+					CommentView,
+					{
 						comment,
-						resourceId: fileInfo.id,
+						resourceId: node.fileid,
 						reloadCallback: reload,
 					},
-				})
-				this._CommentsViewInstance.$mount(element)
+				)
+				app.mount(element)
+				this._CommentsViewInstance = app
 			},
 			unmount() {
-				this._CommentsViewInstance.$destroy()
+				this._CommentsViewInstance?.unmount()
 			},
 		}))
 	})

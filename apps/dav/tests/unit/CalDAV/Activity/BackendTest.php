@@ -1,28 +1,11 @@
 <?php
+
+declare(strict_types=1);
 /**
- * @copyright Copyright (c) 2016 Joas Schilling <coding@schilljs.com>
- *
- * @author Christoph Wurst <christoph@winzerhof-wurst.at>
- * @author Joas Schilling <coding@schilljs.com>
- * @author Roeland Jago Douma <roeland@famdouma.nl>
- * @author Thomas Citharel <nextcloud@tcit.fr>
- *
- * @license GNU AGPL version 3 or any later version
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
- *
+ * SPDX-FileCopyrightText: 2016 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
+
 namespace OCA\DAV\Tests\unit\CalDAV\Activity;
 
 use OCA\DAV\CalDAV\Activity\Backend;
@@ -39,21 +22,11 @@ use PHPUnit\Framework\MockObject\MockObject;
 use Test\TestCase;
 
 class BackendTest extends TestCase {
-
-	/** @var IManager|MockObject */
-	protected $activityManager;
-
-	/** @var IGroupManager|MockObject */
-	protected $groupManager;
-
-	/** @var IUserSession|MockObject */
-	protected $userSession;
-
-	/** @var IAppManager|MockObject */
-	protected $appManager;
-
-	/** @var IUserManager|MockObject */
-	protected $userManager;
+	protected IManager&MockObject $activityManager;
+	protected IGroupManager&MockObject $groupManager;
+	protected IUserSession&MockObject $userSession;
+	protected IAppManager&MockObject $appManager;
+	protected IUserManager&MockObject $userManager;
 
 	protected function setUp(): void {
 		parent::setUp();
@@ -65,10 +38,9 @@ class BackendTest extends TestCase {
 	}
 
 	/**
-	 * @param array $methods
-	 * @return Backend|MockObject
+	 * @return Backend|(Backend&MockObject)
 	 */
-	protected function getBackend(array $methods = []) {
+	protected function getBackend(array $methods = []): Backend {
 		if (empty($methods)) {
 			return new Backend(
 				$this->activityManager,
@@ -91,7 +63,7 @@ class BackendTest extends TestCase {
 		}
 	}
 
-	public function dataCallTriggerCalendarActivity() {
+	public static function dataCallTriggerCalendarActivity(): array {
 		return [
 			['onCalendarAdd', [['data']], Calendar::SUBJECT_ADD, [['data'], [], []]],
 			['onCalendarUpdate', [['data'], ['shares'], ['changed-properties']], Calendar::SUBJECT_UPDATE, [['data'], ['shares'], ['changed-properties']]],
@@ -100,15 +72,8 @@ class BackendTest extends TestCase {
 		];
 	}
 
-	/**
-	 * @dataProvider dataCallTriggerCalendarActivity
-	 *
-	 * @param string $method
-	 * @param array $payload
-	 * @param string $expectedSubject
-	 * @param array $expectedPayload
-	 */
-	public function testCallTriggerCalendarActivity($method, array $payload, $expectedSubject, array $expectedPayload): void {
+	#[\PHPUnit\Framework\Attributes\DataProvider(methodName: 'dataCallTriggerCalendarActivity')]
+	public function testCallTriggerCalendarActivity(string $method, array $payload, string $expectedSubject, array $expectedPayload): void {
 		$backend = $this->getBackend(['triggerCalendarActivity']);
 		$backend->expects($this->once())
 			->method('triggerCalendarActivity')
@@ -121,7 +86,7 @@ class BackendTest extends TestCase {
 		call_user_func_array([$backend, $method], $payload);
 	}
 
-	public function dataTriggerCalendarActivity() {
+	public static function dataTriggerCalendarActivity(): array {
 		return [
 			// Add calendar
 			[Calendar::SUBJECT_ADD, [], [], [], '', '', null, []],
@@ -202,18 +167,8 @@ class BackendTest extends TestCase {
 		];
 	}
 
-	/**
-	 * @dataProvider dataTriggerCalendarActivity
-	 * @param string $action
-	 * @param array $data
-	 * @param array $shares
-	 * @param array $changedProperties
-	 * @param string $currentUser
-	 * @param string $author
-	 * @param string[]|null $shareUsers
-	 * @param string[] $users
-	 */
-	public function testTriggerCalendarActivity($action, array $data, array $shares, array $changedProperties, $currentUser, $author, $shareUsers, array $users): void {
+	#[\PHPUnit\Framework\Attributes\DataProvider(methodName: 'dataTriggerCalendarActivity')]
+	public function testTriggerCalendarActivity(string $action, array $data, array $shares, array $changedProperties, string $currentUser, string $author, ?array $shareUsers, array $users): void {
 		$backend = $this->getBackend(['getUsersForShares']);
 
 		if ($shareUsers === null) {
@@ -298,7 +253,7 @@ class BackendTest extends TestCase {
 		], [], []]);
 	}
 
-	public function dataGetUsersForShares() {
+	public static function dataGetUsersForShares(): array {
 		return [
 			[
 				[],
@@ -341,12 +296,7 @@ class BackendTest extends TestCase {
 		];
 	}
 
-	/**
-	 * @dataProvider dataGetUsersForShares
-	 * @param array $shares
-	 * @param array $groups
-	 * @param array $expected
-	 */
+	#[\PHPUnit\Framework\Attributes\DataProvider(methodName: 'dataGetUsersForShares')]
 	public function testGetUsersForShares(array $shares, array $groups, array $expected): void {
 		$backend = $this->getBackend();
 
@@ -374,9 +324,79 @@ class BackendTest extends TestCase {
 		$this->assertEquals($expected, $users);
 	}
 
+	public static function dataOnMovedCalendarObject(): array {
+		return [
+			'no sharees' => [[], [], ['owner']],
+			'no common sharees' => [['user1'], ['user2'], ['owner']],
+			'common sharees' => [['user1', 'user2'], ['user2', 'user3'], ['user2', 'owner']],
+			'owner among sharees' => [['owner', 'user1'], ['owner', 'user1'], ['owner', 'user1']],
+		];
+	}
+
+	#[\PHPUnit\Framework\Attributes\DataProvider(methodName: 'dataOnMovedCalendarObject')]
+	public function testOnMovedCalendarObject(array $sourceUsers, array $targetUsers, array $expectedUsers): void {
+		$backend = $this->getBackend(['getUsersForShares']);
+
+		$sourceShares = [
+			['{http://owncloud.org/ns}principal' => 'principals/users/user1'],
+			['{http://owncloud.org/ns}principal' => 'principals/groups/group1'],
+		];
+		$targetShares = [
+			['{http://owncloud.org/ns}principal' => 'principals/users/user2'],
+		];
+		$backend->expects($this->exactly(2))
+			->method('getUsersForShares')
+			->willReturnMap([
+				[$sourceShares, $sourceUsers],
+				[$targetShares, $targetUsers],
+			]);
+
+		$this->userSession->method('getUser')
+			->willReturn(null);
+		$this->appManager->method('isEnabledForUser')
+			->willReturn(false);
+
+		$event = $this->createMock(IEvent::class);
+		$this->activityManager->expects($this->once())
+			->method('generateEvent')
+			->willReturn($event);
+		$event->method('setApp')->willReturnSelf();
+		$event->method('setObject')->willReturnSelf();
+		$event->method('setType')->willReturnSelf();
+		$event->method('setAuthor')->willReturnSelf();
+		$event->method('getAuthor')->willReturn('owner');
+		$event->method('setSubject')->willReturnSelf();
+
+		$affectedUsers = [];
+		$event->expects($this->exactly(count($expectedUsers)))
+			->method('setAffectedUser')
+			->willReturnCallback(function (string $user) use (&$affectedUsers, $event) {
+				$affectedUsers[] = $user;
+				return $event;
+			});
+		$this->activityManager->expects($this->exactly(count($expectedUsers)))
+			->method('publish')
+			->with($event);
+
+		$backend->onMovedCalendarObject(
+			['id' => 1, 'uri' => 'source', 'principaluri' => 'principals/users/owner', '{DAV:}displayname' => 'Source'],
+			['id' => 2, 'uri' => 'target', 'principaluri' => 'principals/users/owner', '{DAV:}displayname' => 'Target'],
+			$sourceShares,
+			$targetShares,
+			[
+				'uri' => 'event.ics',
+				'calendardata' => "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:event-uid\r\nSUMMARY:Event\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n",
+			],
+		);
+
+		sort($affectedUsers);
+		sort($expectedUsers);
+		$this->assertEquals($expectedUsers, $affectedUsers);
+	}
+
 	/**
 	 * @param string[] $users
-	 * @return IUser[]|MockObject[]
+	 * @return IUser[]&MockObject[]
 	 */
 	protected function getUsers(array $users) {
 		$list = [];
@@ -388,7 +408,7 @@ class BackendTest extends TestCase {
 
 	/**
 	 * @param string $uid
-	 * @return IUser|MockObject
+	 * @return IUser&MockObject
 	 */
 	protected function getUserMock($uid) {
 		$user = $this->createMock(IUser::class);

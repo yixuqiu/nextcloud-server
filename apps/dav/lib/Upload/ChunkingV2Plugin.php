@@ -1,26 +1,9 @@
 <?php
 
 declare(strict_types=1);
-/*
- * @copyright Copyright (c) 2021 Julius Härtl <jus@bitgrid.net>
- *
- * @author Julius Härtl <jus@bitgrid.net>
- *
- * @license GNU AGPL version 3 or any later version
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
- *
+/**
+ * SPDX-FileCopyrightText: 2021 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
 namespace OCA\DAV\Upload;
@@ -29,12 +12,14 @@ use Exception;
 use InvalidArgumentException;
 use OC\Files\Filesystem;
 use OC\Files\ObjectStore\ObjectStoreStorage;
+use OC\Files\Storage\Wrapper\Encryption;
 use OC\Files\View;
 use OC\Memcache\Memcached;
 use OC\Memcache\Redis;
 use OC_Hook;
 use OCA\DAV\Connector\Sabre\Directory;
 use OCA\DAV\Connector\Sabre\File;
+use OCP\AppFramework\Http;
 use OCP\Files\IMimeTypeDetector;
 use OCP\Files\IRootFolder;
 use OCP\Files\ObjectStore\IObjectStoreMultiPartUpload;
@@ -45,7 +30,9 @@ use OCP\ICacheFactory;
 use OCP\IConfig;
 use OCP\Lock\ILockingProvider;
 use Sabre\DAV\Exception\BadRequest;
+use Sabre\DAV\Exception\Forbidden;
 use Sabre\DAV\Exception\InsufficientStorage;
+use Sabre\DAV\Exception\MethodNotAllowed;
 use Sabre\DAV\Exception\NotFound;
 use Sabre\DAV\Exception\PreconditionFailed;
 use Sabre\DAV\ICollection;
@@ -66,15 +53,27 @@ class ChunkingV2Plugin extends ServerPlugin {
 
 	private ?string $uploadId = null;
 	private ?string $uploadPath = null;
+	private ?int $uploadTargetId = null;
 
-	private const TEMP_TARGET = '.target';
+	private const string TEMP_TARGET = '.target';
 
 	public const CACHE_KEY = 'chunking-v2';
 	public const UPLOAD_TARGET_PATH = 'upload-target-path';
 	public const UPLOAD_TARGET_ID = 'upload-target-id';
 	public const UPLOAD_ID = 'upload-id';
 
-	private const DESTINATION_HEADER = 'Destination';
+	private const string DESTINATION_HEADER = 'Destination';
+
+	/**
+	 * Lifetime of the chunked upload session metadata in the distributed cache.
+	 *
+	 * The TTL is refreshed on every successful chunk upload (sliding
+	 * expiration), so it acts as an inactivity timeout rather than a hard
+	 * wall-clock limit. Without the refresh an upload whose total duration
+	 * exceeds this value would fail with "Missing metadata for chunked upload"
+	 * even while chunks are still actively being uploaded.
+	 */
+	private const UPLOAD_SESSION_TTL = 72 * 60 * 60;
 
 	public function __construct(ICacheFactory $cacheFactory) {
 		$this->cache = $cacheFactory->createDistributed(self::CACHE_KEY);
@@ -83,31 +82,66 @@ class ChunkingV2Plugin extends ServerPlugin {
 	/**
 	 * @inheritdoc
 	 */
+	#[\Override]
 	public function initialize(Server $server) {
-		$server->on('afterMethod:MKCOL', [$this, 'afterMkcol']);
+		$server->on('beforeMethod:GET', $this->forbiddenMethod(...));
+		$server->on('beforeMethod:COPY', $this->forbiddenMethod(...));
 		$server->on('beforeMethod:PUT', [$this, 'beforePut']);
 		$server->on('beforeMethod:DELETE', [$this, 'beforeDelete']);
 		$server->on('beforeMove', [$this, 'beforeMove'], 90);
+		$server->on('afterMethod:MKCOL', [$this, 'afterMkcol']);
 
 		$this->server = $server;
+	}
+
+	/**
+	 * @throws MethodNotAllowed
+	 */
+	public function forbiddenMethod(RequestInterface $request) {
+		try {
+			$sourceNode = $this->server->tree->getNodeForPath($request->getPath());
+
+			if ($sourceNode instanceof FutureFile || $sourceNode instanceof UploadFile) {
+				if ($request->getMethod() === 'GET') {
+					throw new MethodNotAllowed('Reading intermediate uploads is not allowed');
+				} else {
+					throw new MethodNotAllowed('Intermediate uploads must be finalized using MOVE');
+				}
+			}
+		} catch (NotFound) {
+			// The node could not be resolved (yet), e.g. because the targeted
+			// collection is provided by another app and not registered on the
+			// tree at this point. This is no intermediate upload, so let the
+			// regular request handling deal with it (and report any 404).
+		}
+
+		return true;
 	}
 
 	/**
 	 * @param string $path
 	 * @param bool $createIfNotExists
 	 * @return FutureFile|UploadFile|ICollection|INode
+	 * @throws Forbidden if the file already exists, but is not updateable
 	 */
 	private function getUploadFile(string $path, bool $createIfNotExists = false) {
 		try {
 			$actualFile = $this->server->tree->getNodeForPath($path);
-			// Only directly upload to the target file if it is on the same storage
-			// There may be further potential to optimize here by also uploading
-			// to other storages directly. This would require to also carefully pick
-			// the storage/path used in getStorage()
-			if ($actualFile instanceof File && $this->uploadFolder->getStorage()->getId() === $actualFile->getNode()->getStorage()->getId()) {
-				return $actualFile;
+			if ($actualFile instanceof File) {
+				$node = $actualFile->getNode();
+				// check that the node has update permissions
+				if (!$node->isUpdateable()) {
+					throw new Forbidden();
+				}
+				// Only directly upload to the target file if it is on the same storage
+				// There may be further potential to optimize here by also uploading
+				// to other storages directly. This would require to also carefully pick
+				// the storage/path used in getStorage()
+				if ($this->uploadFolder->getStorage()->getId() === $node->getStorage()->getId()) {
+					return $actualFile;
+				}
 			}
-		} catch (NotFound $e) {
+		} catch (NotFound) {
 			// If there is no target file we upload to the upload folder first
 		}
 
@@ -134,14 +168,11 @@ class ChunkingV2Plugin extends ServerPlugin {
 		[$storage, $storagePath] = $this->getUploadStorage($this->uploadPath);
 
 		$this->uploadId = $storage->startChunkedWrite($storagePath);
+		$this->uploadTargetId = $targetFile->getId();
 
-		$this->cache->set($this->uploadFolder->getName(), [
-			self::UPLOAD_ID => $this->uploadId,
-			self::UPLOAD_TARGET_PATH => $this->uploadPath,
-			self::UPLOAD_TARGET_ID => $targetFile->getId(),
-		], 86400);
+		$this->storeUploadSession();
 
-		$response->setStatus(201);
+		$response->setStatus(Http::STATUS_CREATED);
 		return true;
 	}
 
@@ -181,6 +212,9 @@ class ChunkingV2Plugin extends ServerPlugin {
 		$stream = $request->getBodyAsStream();
 		$storage->putChunkedWritePart($storagePath, $this->uploadId, (string)$partId, $stream, $additionalSize);
 
+		// Refresh the session metadata TTL on every successful chunk
+		$this->storeUploadSession();
+
 		$storage->getCache()->update($uploadFile->getId(), ['size' => $uploadFile->getSize() + $additionalSize]);
 		if ($tempTargetFile) {
 			$storage->getPropagator()->propagateChange($tempTargetFile->getInternalPath(), time(), $additionalSize);
@@ -205,7 +239,6 @@ class ChunkingV2Plugin extends ServerPlugin {
 		/** @var Directory $destinationParent */
 		$destinationParent = $this->server->tree->getNodeForPath($destinationDir);
 		$destinationExists = $destinationParent->childExists($destinationName);
-
 
 		// allow sync clients to send the modification and creation time along in a header
 		$updateFileInfo = [];
@@ -252,7 +285,7 @@ class ChunkingV2Plugin extends ServerPlugin {
 		$response = $this->server->httpResponse;
 		$response->setHeader('Content-Type', 'application/xml; charset=utf-8');
 		$response->setHeader('Content-Length', '0');
-		$response->setStatus($destinationExists ? 204 : 201);
+		$response->setStatus($destinationExists ? Http::STATUS_NO_CONTENT : Http::STATUS_CREATED);
 		return false;
 	}
 
@@ -285,6 +318,9 @@ class ChunkingV2Plugin extends ServerPlugin {
 		}
 		if (!$this->uploadFolder->getStorage()->instanceOfStorage(IChunkedFileWrite::class)) {
 			throw new StorageInvalidException('Storage does not support chunked file writing');
+		}
+		if ($this->uploadFolder->getStorage()->instanceOfStorage(Encryption::class)) {
+			throw new StorageInvalidException('Chunked file writing is not supported with server-side encryption');
 		}
 		if ($this->uploadFolder->getStorage()->instanceOfStorage(ObjectStoreStorage::class) && !$this->uploadFolder->getStorage()->getObjectStore() instanceof IObjectStoreMultiPartUpload) {
 			throw new StorageInvalidException('Storage does not support multi part uploads');
@@ -322,6 +358,23 @@ class ChunkingV2Plugin extends ServerPlugin {
 		$uploadMetadata = $this->cache->get($this->uploadFolder->getName());
 		$this->uploadId = $uploadMetadata[self::UPLOAD_ID] ?? null;
 		$this->uploadPath = $uploadMetadata[self::UPLOAD_TARGET_PATH] ?? null;
+		$this->uploadTargetId = $uploadMetadata[self::UPLOAD_TARGET_ID] ?? null;
+	}
+
+	/**
+	 * Persist the chunked upload session metadata in the distributed cache and
+	 * (re)set its TTL to provide a sliding expiration based on activity rather than a fixed lifetime.
+	 */
+	private function storeUploadSession(): void {
+		if ($this->uploadId === null || $this->uploadPath === null || $this->uploadTargetId === null) {
+			return;
+		}
+
+		$this->cache->set($this->uploadFolder->getName(), [
+			self::UPLOAD_ID => $this->uploadId,
+			self::UPLOAD_TARGET_PATH => $this->uploadPath,
+			self::UPLOAD_TARGET_ID => $this->uploadTargetId,
+		], self::UPLOAD_SESSION_TTL);
 	}
 
 	private function completeChunkedWrite(string $targetAbsolutePath): void {
@@ -366,10 +419,6 @@ class ChunkingV2Plugin extends ServerPlugin {
 			OC_Hook::emit(Filesystem::CLASSNAME, Filesystem::signal_create, [
 				Filesystem::signal_param_path => $hookPath,
 			]);
-		} else {
-			OC_Hook::emit(Filesystem::CLASSNAME, Filesystem::signal_update, [
-				Filesystem::signal_param_path => $hookPath,
-			]);
 		}
 		OC_Hook::emit(Filesystem::CLASSNAME, Filesystem::signal_write, [
 			Filesystem::signal_param_path => $hookPath,
@@ -380,10 +429,6 @@ class ChunkingV2Plugin extends ServerPlugin {
 		$hookPath = $this->getHookPath($target);
 		if (!$exists) {
 			OC_Hook::emit(Filesystem::CLASSNAME, Filesystem::signal_post_create, [
-				Filesystem::signal_param_path => $hookPath,
-			]);
-		} else {
-			OC_Hook::emit(Filesystem::CLASSNAME, Filesystem::signal_post_update, [
 				Filesystem::signal_param_path => $hookPath,
 			]);
 		}

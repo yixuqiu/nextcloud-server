@@ -2,42 +2,29 @@
 
 declare(strict_types=1);
 /**
- * @copyright Copyright (c) 2022 Julius Härtl <jus@bitgrid.net>
- *
- * @author Julius Härtl <jus@bitgrid.net>
- *
- * @license GNU AGPL version 3 or any later version
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
+ * SPDX-FileCopyrightText: 2022 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
 namespace OC\Collaboration\Reference\File;
 
-use OC\User\NoUserException;
 use OCP\Collaboration\Reference\ADiscoverableReferenceProvider;
 use OCP\Collaboration\Reference\IReference;
 use OCP\Collaboration\Reference\Reference;
 use OCP\Files\IMimeTypeDetector;
 use OCP\Files\InvalidPathException;
 use OCP\Files\IRootFolder;
+use OCP\Files\Node;
 use OCP\Files\NotFoundException;
 use OCP\Files\NotPermittedException;
+use OCP\Files\Storage\ISharedStorage;
 use OCP\IL10N;
 use OCP\IPreview;
 use OCP\IURLGenerator;
 use OCP\IUserSession;
 use OCP\L10N\IFactory;
+use OCP\Share\IShare;
+use OCP\User\Exceptions\UserNotFoundException;
 
 class FileReferenceProvider extends ADiscoverableReferenceProvider {
 	private ?string $userId;
@@ -55,6 +42,7 @@ class FileReferenceProvider extends ADiscoverableReferenceProvider {
 		$this->l10n = $l10n->get('files');
 	}
 
+	#[\Override]
 	public function matchReference(string $referenceText): bool {
 		return $this->getFilesAppLinkId($referenceText) !== null;
 	}
@@ -90,6 +78,7 @@ class FileReferenceProvider extends ADiscoverableReferenceProvider {
 		return $fileId !== null ? (int)$fileId : null;
 	}
 
+	#[\Override]
 	public function resolveReference(string $referenceText): ?IReference {
 		if ($this->matchReference($referenceText)) {
 			$reference = new Reference($referenceText);
@@ -136,6 +125,12 @@ class FileReferenceProvider extends ADiscoverableReferenceProvider {
 				$reference->setImageUrl($fileTypeIconUrl);
 			}
 
+			// What the share allows, and whether it asks to hide the download
+			// on top, as the share attributes and hide-download say over DAV
+			$share = $this->getShare($file);
+			$canDownload = $share?->canDownload() ?? true;
+			$hideDownload = !$canDownload || ($share?->getHideDownload() ?? false);
+
 			$reference->setRichObject('file', [
 				'id' => $file->getId(),
 				'name' => $file->getName(),
@@ -144,33 +139,55 @@ class FileReferenceProvider extends ADiscoverableReferenceProvider {
 				'link' => $reference->getUrl(),
 				'mimetype' => $file->getMimetype(),
 				'mtime' => $file->getMTime(),
-				'preview-available' => $this->previewManager->isAvailable($file)
+				'preview-available' => $this->previewManager->isAvailable($file),
+				'permissions' => $file->getPermissions(),
+				'hide-download' => $hideDownload ? 'yes' : 'no',
+				'can-download' => $canDownload ? 'yes' : 'no',
 			]);
-		} catch (InvalidPathException|NotFoundException|NotPermittedException|NoUserException $e) {
+		} catch (InvalidPathException|NotFoundException|NotPermittedException|UserNotFoundException $e) {
 			throw new NotFoundException();
 		}
 	}
 
+	/**
+	 * The share the user received the file through, if they did
+	 */
+	private function getShare(Node $file): ?IShare {
+		$storage = $file->getStorage();
+		if (!$storage->instanceOfStorage(ISharedStorage::class)) {
+			return null;
+		}
+
+		/** @var ISharedStorage $storage */
+		return $storage->getShare();
+	}
+
+	#[\Override]
 	public function getCachePrefix(string $referenceId): string {
 		return (string)$this->getFilesAppLinkId($referenceId);
 	}
 
+	#[\Override]
 	public function getCacheKey(string $referenceId): ?string {
 		return $this->userId ?? '';
 	}
 
+	#[\Override]
 	public function getId(): string {
 		return 'files';
 	}
 
+	#[\Override]
 	public function getTitle(): string {
 		return $this->l10n->t('Files');
 	}
 
+	#[\Override]
 	public function getOrder(): int {
 		return 0;
 	}
 
+	#[\Override]
 	public function getIconUrl(): string {
 		return $this->urlGenerator->imagePath('files', 'folder.svg');
 	}

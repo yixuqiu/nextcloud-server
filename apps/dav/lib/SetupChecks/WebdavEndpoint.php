@@ -3,35 +3,17 @@
 declare(strict_types=1);
 
 /**
- * @copyright Copyright (c) 2024 Côme Chilliet <come.chilliet@nextcloud.com>
- *
- * @author Côme Chilliet <come.chilliet@nextcloud.com>
- * @author Ferdinand Thiessen <opensource@fthiessen.de>
- *
- * @license AGPL-3.0-or-later
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
- *
+ * SPDX-FileCopyrightText: 2024 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
 namespace OCA\DAV\SetupChecks;
 
-use OCA\Settings\SetupChecks\CheckServerResponseTrait;
 use OCP\Http\Client\IClientService;
 use OCP\IConfig;
 use OCP\IL10N;
 use OCP\IURLGenerator;
+use OCP\SetupCheck\CheckServerResponseTrait;
 use OCP\SetupCheck\ISetupCheck;
 use OCP\SetupCheck\SetupResult;
 use Psr\Log\LoggerInterface;
@@ -49,14 +31,17 @@ class WebdavEndpoint implements ISetupCheck {
 	) {
 	}
 
+	#[\Override]
 	public function getCategory(): string {
 		return 'network';
 	}
 
+	#[\Override]
 	public function getName(): string {
 		return $this->l10n->t('WebDAV endpoint');
 	}
 
+	#[\Override]
 	public function run(): SetupResult {
 		$urls = [
 			['propfind', '/remote.php/webdav', [207, 401]],
@@ -66,7 +51,7 @@ class WebdavEndpoint implements ISetupCheck {
 			$works = null;
 			foreach ($this->runRequest($verb, $url, ['httpErrors' => false]) as $response) {
 				// Check that the response status matches
-				$works = in_array($response->getStatusCode(), $validStatuses);
+				$works = in_array($response->getStatusCode(), $validStatuses, true);
 				// Skip the other requests if one works
 				if ($works === true) {
 					break;

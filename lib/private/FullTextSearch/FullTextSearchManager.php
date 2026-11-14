@@ -3,26 +3,10 @@
 declare(strict_types=1);
 
 /**
- * @copyright 2018, Maxence Lange <maxence@artificial-owl.com>
- *
- * @author Maxence Lange <maxence@artificial-owl.com>
- *
- * @license GNU AGPL version 3 or any later version
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
- *
+ * SPDX-FileCopyrightText: 2018 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
+
 namespace OC\FullTextSearch;
 
 use OCP\FullTextSearch\Exceptions\FullTextSearchAppNotAvailableException;
@@ -48,6 +32,7 @@ class FullTextSearchManager implements IFullTextSearchManager {
 	/**
 	 * @since 15.0.0
 	 */
+	#[\Override]
 	public function registerProviderService(IProviderService $providerService): void {
 		$this->providerService = $providerService;
 	}
@@ -55,6 +40,7 @@ class FullTextSearchManager implements IFullTextSearchManager {
 	/**
 	 * @since 15.0.0
 	 */
+	#[\Override]
 	public function registerIndexService(IIndexService $indexService): void {
 		$this->indexService = $indexService;
 	}
@@ -62,6 +48,7 @@ class FullTextSearchManager implements IFullTextSearchManager {
 	/**
 	 * @since 15.0.0
 	 */
+	#[\Override]
 	public function registerSearchService(ISearchService $searchService): void {
 		$this->searchService = $searchService;
 	}
@@ -69,16 +56,16 @@ class FullTextSearchManager implements IFullTextSearchManager {
 	/**
 	 * @since 16.0.0
 	 */
+	#[\Override]
 	public function isAvailable(): bool {
-		if ($this->indexService === null ||
-			$this->providerService === null ||
-			$this->searchService === null) {
+		if ($this->indexService === null
+			|| $this->providerService === null
+			|| $this->searchService === null) {
 			return false;
 		}
 
 		return true;
 	}
-
 
 	/**
 	 * @throws FullTextSearchAppNotAvailableException
@@ -91,7 +78,6 @@ class FullTextSearchManager implements IFullTextSearchManager {
 		return $this->providerService;
 	}
 
-
 	/**
 	 * @throws FullTextSearchAppNotAvailableException
 	 */
@@ -102,7 +88,6 @@ class FullTextSearchManager implements IFullTextSearchManager {
 
 		return $this->indexService;
 	}
-
 
 	/**
 	 * @throws FullTextSearchAppNotAvailableException
@@ -115,26 +100,26 @@ class FullTextSearchManager implements IFullTextSearchManager {
 		return $this->searchService;
 	}
 
-
 	/**
 	 * @throws FullTextSearchAppNotAvailableException
 	 */
+	#[\Override]
 	public function addJavascriptAPI(): void {
 		$this->getProviderService()->addJavascriptAPI();
 	}
 
-
 	/**
 	 * @throws FullTextSearchAppNotAvailableException
 	 */
+	#[\Override]
 	public function isProviderIndexed(string $providerId): bool {
 		return $this->getProviderService()->isProviderIndexed($providerId);
 	}
 
-
 	/**
 	 * @throws FullTextSearchAppNotAvailableException
 	 */
+	#[\Override]
 	public function getIndex(string $providerId, string $documentId): IIndex {
 		return $this->getIndexService()->getIndex($providerId, $documentId);
 	}
@@ -144,6 +129,7 @@ class FullTextSearchManager implements IFullTextSearchManager {
 	 *
 	 * @throws FullTextSearchAppNotAvailableException
 	 */
+	#[\Override]
 	public function createIndex(
 		string $providerId,
 		string $documentId,
@@ -153,12 +139,12 @@ class FullTextSearchManager implements IFullTextSearchManager {
 		return $this->getIndexService()->createIndex($providerId, $documentId, $userId, $status);
 	}
 
-
 	/**
 	 * @see IIndex for available value for $status.
 	 *
 	 * @throws FullTextSearchAppNotAvailableException
 	 */
+	#[\Override]
 	public function updateIndexStatus(
 		string $providerId,
 		string $documentId,
@@ -173,6 +159,7 @@ class FullTextSearchManager implements IFullTextSearchManager {
 	 *
 	 * @throws FullTextSearchAppNotAvailableException
 	 */
+	#[\Override]
 	public function updateIndexesStatus(
 		string $providerId,
 		array $documentIds,
@@ -182,21 +169,21 @@ class FullTextSearchManager implements IFullTextSearchManager {
 		$this->getIndexService()->updateIndexesStatus($providerId, $documentIds, $status, $reset);
 	}
 
-
 	/**
 	 * @param IIndex[] $indexes
 	 *
 	 * @throws FullTextSearchAppNotAvailableException
 	 */
+	#[\Override]
 	public function updateIndexes(array $indexes): void {
 		$this->getIndexService()->updateIndexes($indexes);
 	}
-
 
 	/**
 	 * @return ISearchResult[]
 	 * @throws FullTextSearchAppNotAvailableException
 	 */
+	#[\Override]
 	public function search(array $request, string $userId = ''): array {
 		$searchRequest = $this->getSearchService()->generateSearchRequest($request);
 

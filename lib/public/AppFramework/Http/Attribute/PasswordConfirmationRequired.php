@@ -3,24 +3,8 @@
 declare(strict_types=1);
 
 /**
- * @copyright Copyright (c) 2023 Joas Schilling <coding@schilljs.com>
- *
- * @author Joas Schilling <coding@schilljs.com>
- *
- * @license GNU AGPL version 3 or any later version
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ * SPDX-FileCopyrightText: 2023 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
 namespace OCP\AppFramework\Http\Attribute;
@@ -28,10 +12,40 @@ namespace OCP\AppFramework\Http\Attribute;
 use Attribute;
 
 /**
- * Attribute for controller methods that require the password to be confirmed with in the last 30 minutes
+ * Attribute for controller methods that require password confirmation, if
+ * supported by the active authentication backend.
+ *
+ * The exact enforcement behavior depends on the password confirmation
+ * middleware.
+ *
+ * In non-strict mode, this normally relies on a recent prior confirmation,
+ * currently defined by the middleware as within the last 30 minutes.
+ *
+ * In strict mode, confirmation is attempted as part of the current request.
+ * Credentials must be provided via Basic HTTP authentication.
  *
  * @since 27.0.0
  */
 #[Attribute]
 class PasswordConfirmationRequired {
+	/**
+	 * @param bool $strict Whether password confirmation must happen as part of
+	 *                     the current request instead of relying on a recent
+	 *                     prior confirmation.
+	 *
+	 * @since 31.0.0
+	 */
+	public function __construct(
+		protected bool $strict = false,
+	) {
+	}
+
+	/**
+	 * Returns whether password confirmation must happen during the current request.
+	 *
+	 * @since 31.0.0
+	 */
+	public function getStrict(): bool {
+		return $this->strict;
+	}
 }

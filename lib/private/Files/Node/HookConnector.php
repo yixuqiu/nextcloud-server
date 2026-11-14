@@ -1,30 +1,12 @@
 <?php
 
 declare(strict_types=1);
-
 /**
- * @copyright Copyright (c) 2016, ownCloud, Inc.
- *
- * @author Arthur Schiwon <blizzz@arthur-schiwon.de>
- * @author Maxence Lange <maxence@artificial-owl.com>
- * @author Robin Appelman <robin@icewind.nl>
- * @author Roeland Jago Douma <roeland@famdouma.nl>
- *
- * @license AGPL-3.0
- *
- * This code is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License, version 3,
- * as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program. If not, see <http://www.gnu.org/licenses/>
- *
+ * SPDX-FileCopyrightText: 2016-2024 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-FileCopyrightText: 2016 ownCloud, Inc.
+ * SPDX-License-Identifier: AGPL-3.0-only
  */
+
 namespace OC\Files\Node;
 
 use OC\Files\Filesystem;
@@ -58,35 +40,34 @@ class HookConnector {
 		private IRootFolder $root,
 		private View $view,
 		private IEventDispatcher $dispatcher,
-		private LoggerInterface $logger
+		private LoggerInterface $logger,
 	) {
 	}
 
 	public function viewToNode() {
-		Util::connectHook('OC_Filesystem', 'write', $this, 'write');
-		Util::connectHook('OC_Filesystem', 'post_write', $this, 'postWrite');
+		Util::connectHook(Filesystem::CLASSNAME, Filesystem::signal_write, $this, 'write');
+		Util::connectHook(Filesystem::CLASSNAME, Filesystem::signal_post_write, $this, 'postWrite');
 
-		Util::connectHook('OC_Filesystem', 'create', $this, 'create');
-		Util::connectHook('OC_Filesystem', 'post_create', $this, 'postCreate');
+		Util::connectHook(Filesystem::CLASSNAME, 'create', $this, 'create');
+		Util::connectHook(Filesystem::CLASSNAME, 'post_create', $this, 'postCreate');
 
-		Util::connectHook('OC_Filesystem', 'delete', $this, 'delete');
-		Util::connectHook('OC_Filesystem', 'post_delete', $this, 'postDelete');
+		Util::connectHook(Filesystem::CLASSNAME, 'delete', $this, 'delete');
+		Util::connectHook(Filesystem::CLASSNAME, 'post_delete', $this, 'postDelete');
 
-		Util::connectHook('OC_Filesystem', 'rename', $this, 'rename');
-		Util::connectHook('OC_Filesystem', 'post_rename', $this, 'postRename');
+		Util::connectHook(Filesystem::CLASSNAME, 'rename', $this, 'rename');
+		Util::connectHook(Filesystem::CLASSNAME, 'post_rename', $this, 'postRename');
 
-		Util::connectHook('OC_Filesystem', 'copy', $this, 'copy');
-		Util::connectHook('OC_Filesystem', 'post_copy', $this, 'postCopy');
+		Util::connectHook(Filesystem::CLASSNAME, 'copy', $this, 'copy');
+		Util::connectHook(Filesystem::CLASSNAME, 'post_copy', $this, 'postCopy');
 
-		Util::connectHook('OC_Filesystem', 'touch', $this, 'touch');
-		Util::connectHook('OC_Filesystem', 'post_touch', $this, 'postTouch');
+		Util::connectHook(Filesystem::CLASSNAME, 'touch', $this, 'touch');
+		Util::connectHook(Filesystem::CLASSNAME, 'post_touch', $this, 'postTouch');
 
-		Util::connectHook('OC_Filesystem', 'read', $this, 'read');
+		Util::connectHook(Filesystem::CLASSNAME, 'read', $this, 'read');
 	}
 
 	public function write($arguments) {
 		$node = $this->getNodeForPath($arguments['path']);
-		$this->root->emit('\OC\Files', 'preWrite', [$node]);
 		$this->dispatcher->dispatch('\OCP\Files::preWrite', new GenericEvent($node));
 
 		$event = new BeforeNodeWrittenEvent($node);
@@ -104,7 +85,6 @@ class HookConnector {
 
 	public function create($arguments) {
 		$node = $this->getNodeForPath($arguments['path']);
-		$this->root->emit('\OC\Files', 'preCreate', [$node]);
 		$this->dispatcher->dispatch('\OCP\Files::preCreate', new GenericEvent($node));
 
 		$event = new BeforeNodeCreatedEvent($node);
@@ -113,7 +93,6 @@ class HookConnector {
 
 	public function postCreate($arguments) {
 		$node = $this->getNodeForPath($arguments['path']);
-		$this->root->emit('\OC\Files', 'postCreate', [$node]);
 		$this->dispatcher->dispatch('\OCP\Files::postCreate', new GenericEvent($node));
 
 		$event = new NodeCreatedEvent($node);
@@ -123,7 +102,6 @@ class HookConnector {
 	public function delete($arguments) {
 		$node = $this->getNodeForPath($arguments['path']);
 		$this->deleteMetaCache[$node->getPath()] = $node->getFileInfo();
-		$this->root->emit('\OC\Files', 'preDelete', [$node]);
 		$this->dispatcher->dispatch('\OCP\Files::preDelete', new GenericEvent($node));
 
 		$event = new BeforeNodeDeletedEvent($node);
@@ -138,7 +116,6 @@ class HookConnector {
 	public function postDelete($arguments) {
 		$node = $this->getNodeForPath($arguments['path']);
 		unset($this->deleteMetaCache[$node->getPath()]);
-		$this->root->emit('\OC\Files', 'postDelete', [$node]);
 		$this->dispatcher->dispatch('\OCP\Files::postDelete', new GenericEvent($node));
 
 		$event = new NodeDeletedEvent($node);
@@ -147,7 +124,6 @@ class HookConnector {
 
 	public function touch($arguments) {
 		$node = $this->getNodeForPath($arguments['path']);
-		$this->root->emit('\OC\Files', 'preTouch', [$node]);
 		$this->dispatcher->dispatch('\OCP\Files::preTouch', new GenericEvent($node));
 
 		$event = new BeforeNodeTouchedEvent($node);
@@ -156,7 +132,6 @@ class HookConnector {
 
 	public function postTouch($arguments) {
 		$node = $this->getNodeForPath($arguments['path']);
-		$this->root->emit('\OC\Files', 'postTouch', [$node]);
 		$this->dispatcher->dispatch('\OCP\Files::postTouch', new GenericEvent($node));
 
 		$event = new NodeTouchedEvent($node);
@@ -166,7 +141,6 @@ class HookConnector {
 	public function rename($arguments) {
 		$source = $this->getNodeForPath($arguments['oldpath']);
 		$target = $this->getNodeForPath($arguments['newpath']);
-		$this->root->emit('\OC\Files', 'preRename', [$source, $target]);
 		$this->dispatcher->dispatch('\OCP\Files::preRename', new GenericEvent([$source, $target]));
 
 		$event = new BeforeNodeRenamedEvent($source, $target);
@@ -181,7 +155,6 @@ class HookConnector {
 	public function postRename($arguments) {
 		$source = $this->getNodeForPath($arguments['oldpath']);
 		$target = $this->getNodeForPath($arguments['newpath']);
-		$this->root->emit('\OC\Files', 'postRename', [$source, $target]);
 		$this->dispatcher->dispatch('\OCP\Files::postRename', new GenericEvent([$source, $target]));
 
 		$event = new NodeRenamedEvent($source, $target);
@@ -190,8 +163,7 @@ class HookConnector {
 
 	public function copy($arguments) {
 		$source = $this->getNodeForPath($arguments['oldpath']);
-		$target = $this->getNodeForPath($arguments['newpath']);
-		$this->root->emit('\OC\Files', 'preCopy', [$source, $target]);
+		$target = $this->getNodeForPath($arguments['newpath'], $source instanceof Folder);
 		$this->dispatcher->dispatch('\OCP\Files::preCopy', new GenericEvent([$source, $target]));
 
 		$event = new BeforeNodeCopiedEvent($source, $target);
@@ -206,7 +178,6 @@ class HookConnector {
 	public function postCopy($arguments) {
 		$source = $this->getNodeForPath($arguments['oldpath']);
 		$target = $this->getNodeForPath($arguments['newpath']);
-		$this->root->emit('\OC\Files', 'postCopy', [$source, $target]);
 		$this->dispatcher->dispatch('\OCP\Files::postCopy', new GenericEvent([$source, $target]));
 
 		$event = new NodeCopiedEvent($source, $target);
@@ -215,14 +186,13 @@ class HookConnector {
 
 	public function read($arguments) {
 		$node = $this->getNodeForPath($arguments['path']);
-		$this->root->emit('\OC\Files', 'read', [$node]);
 		$this->dispatcher->dispatch('\OCP\Files::read', new GenericEvent([$node]));
 
 		$event = new BeforeNodeReadEvent($node);
 		$this->dispatcher->dispatchTyped($event);
 	}
 
-	private function getNodeForPath(string $path): Node {
+	private function getNodeForPath(string $path, bool $isDir = false): Node {
 		$info = Filesystem::getView()->getFileInfo($path);
 		if (!$info) {
 			$fullPath = Filesystem::getView()->getAbsolutePath($path);
@@ -231,7 +201,7 @@ class HookConnector {
 			} else {
 				$info = null;
 			}
-			if (Filesystem::is_dir($path)) {
+			if ($isDir || Filesystem::is_dir($path)) {
 				return new NonExistingFolder($this->root, $this->view, $fullPath, $info);
 			} else {
 				return new NonExistingFile($this->root, $this->view, $fullPath, $info);

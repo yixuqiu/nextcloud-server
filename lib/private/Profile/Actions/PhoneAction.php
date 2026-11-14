@@ -3,25 +3,8 @@
 declare(strict_types=1);
 
 /**
- * @copyright 2021 Christopher Ng <chrng8@gmail.com>
- *
- * @author Christopher Ng <chrng8@gmail.com>
- *
- * @license GNU AGPL version 3 or any later version
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
- *
+ * SPDX-FileCopyrightText: 2021 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
 namespace OC\Profile\Actions;
@@ -42,35 +25,43 @@ class PhoneAction implements ILinkAction {
 	) {
 	}
 
+	#[\Override]
 	public function preload(IUser $targetUser): void {
 		$account = $this->accountManager->getAccount($targetUser);
 		$this->value = $account->getProperty(IAccountManager::PROPERTY_PHONE)->getValue();
 	}
 
+	#[\Override]
 	public function getAppId(): string {
 		return 'core';
 	}
 
+	#[\Override]
 	public function getId(): string {
 		return IAccountManager::PROPERTY_PHONE;
 	}
 
+	#[\Override]
 	public function getDisplayId(): string {
 		return $this->l10nFactory->get('lib')->t('Phone');
 	}
 
+	#[\Override]
 	public function getTitle(): string {
 		return $this->l10nFactory->get('lib')->t('Call %s', [$this->value]);
 	}
 
+	#[\Override]
 	public function getPriority(): int {
 		return 30;
 	}
 
+	#[\Override]
 	public function getIcon(): string {
-		return $this->urlGenerator->getAbsoluteURL($this->urlGenerator->imagePath('core', 'actions/phone.svg'));
+		return $this->urlGenerator->getAbsoluteURL($this->urlGenerator->imagePath('core', 'actions/phone-outline.svg'));
 	}
 
+	#[\Override]
 	public function getTarget(): ?string {
 		if (empty($this->value)) {
 			return null;

@@ -1,26 +1,10 @@
 <?php
+
 /**
- * @copyright Copyright (c) 2020, Lukas Stabe (lukas@stabe.de)
- *
- * @author Lukas Stabe <lukas@stabe.de>
- * @author Robin Appelman <robin@icewind.nl>
- *
- * @license GNU AGPL version 3 or any later version
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
- *
+ * SPDX-FileCopyrightText: 2020 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
+
 namespace OC\Files\Stream;
 
 use Icewind\Streams\File;
@@ -30,21 +14,18 @@ use Icewind\Streams\Wrapper;
  * A stream wrapper that uses http range requests to provide a seekable stream for http reading
  */
 class SeekableHttpStream implements File {
-	private const PROTOCOL = 'httpseek';
-
-	private static bool $registered = false;
+	private const string PROTOCOL = 'httpseek';
 
 	/**
 	 * Registers the stream wrapper using the `httpseek://` url scheme
 	 * $return void
 	 */
 	private static function registerIfNeeded() {
-		if (!self::$registered) {
+		if (!in_array(self::PROTOCOL, stream_get_wrappers(), true)) {
 			stream_wrapper_register(
 				self::PROTOCOL,
 				self::class
 			);
-			self::$registered = true;
 		}
 	}
 
@@ -108,7 +89,7 @@ class SeekableHttpStream implements File {
 					continue 2;
 				}
 			}
-			throw new \Exception("Failed to get source stream from stream wrapper of " . get_class($responseHead));
+			throw new \Exception('Failed to get source stream from stream wrapper of ' . get_class($responseHead));
 		}
 
 		$rangeHeaders = array_values(array_filter($responseHead, function ($v) {
@@ -161,6 +142,7 @@ class SeekableHttpStream implements File {
 		return is_resource($this->current);
 	}
 
+	#[\Override]
 	public function stream_open($path, $mode, $options, &$opened_path) {
 		$options = stream_context_get_options($this->context)[self::PROTOCOL];
 		$this->openCallback = $options['callback'];
@@ -168,6 +150,7 @@ class SeekableHttpStream implements File {
 		return $this->reconnect(0);
 	}
 
+	#[\Override]
 	public function stream_read($count) {
 		if (!$this->getCurrent()) {
 			return false;
@@ -177,6 +160,7 @@ class SeekableHttpStream implements File {
 		return $ret;
 	}
 
+	#[\Override]
 	public function stream_seek($offset, $whence = SEEK_SET) {
 		switch ($whence) {
 			case SEEK_SET:
@@ -212,10 +196,12 @@ class SeekableHttpStream implements File {
 		return true;
 	}
 
+	#[\Override]
 	public function stream_tell() {
 		return $this->offset;
 	}
 
+	#[\Override]
 	public function stream_stat() {
 		if ($this->getCurrent()) {
 			$stat = fstat($this->getCurrent());
@@ -228,6 +214,7 @@ class SeekableHttpStream implements File {
 		}
 	}
 
+	#[\Override]
 	public function stream_eof() {
 		if ($this->getCurrent()) {
 			return feof($this->getCurrent());
@@ -236,6 +223,7 @@ class SeekableHttpStream implements File {
 		}
 	}
 
+	#[\Override]
 	public function stream_close() {
 		if ($this->hasOpenStream()) {
 			fclose($this->current);
@@ -243,22 +231,27 @@ class SeekableHttpStream implements File {
 		$this->current = null;
 	}
 
+	#[\Override]
 	public function stream_write($data) {
 		return false;
 	}
 
+	#[\Override]
 	public function stream_set_option($option, $arg1, $arg2) {
 		return false;
 	}
 
+	#[\Override]
 	public function stream_truncate($size) {
 		return false;
 	}
 
+	#[\Override]
 	public function stream_lock($operation) {
 		return false;
 	}
 
+	#[\Override]
 	public function stream_flush() {
 		return; //noop because readonly stream
 	}

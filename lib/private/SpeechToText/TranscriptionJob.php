@@ -3,30 +3,12 @@
 declare(strict_types=1);
 
 /**
- * @copyright Copyright (c) 2023 Marcel Klehr <mklehr@gmx.net>
- *
- * @author Marcel Klehr <mklehr@gmx.net>
- *
- * @license GNU AGPL version 3 or any later version
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
+ * SPDX-FileCopyrightText: 2023 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
-
 
 namespace OC\SpeechToText;
 
-use OC\User\NoUserException;
 use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\BackgroundJob\QueuedJob;
 use OCP\EventDispatcher\IEventDispatcher;
@@ -38,6 +20,7 @@ use OCP\PreConditionNotMetException;
 use OCP\SpeechToText\Events\TranscriptionFailedEvent;
 use OCP\SpeechToText\Events\TranscriptionSuccessfulEvent;
 use OCP\SpeechToText\ISpeechToTextManager;
+use OCP\User\Exceptions\UserNotFoundException;
 use Psr\Log\LoggerInterface;
 
 class TranscriptionJob extends QueuedJob {
@@ -52,10 +35,10 @@ class TranscriptionJob extends QueuedJob {
 		$this->setAllowParallelRuns(false);
 	}
 
-
 	/**
 	 * @inheritDoc
 	 */
+	#[\Override]
 	protected function run($argument) {
 		$fileId = $argument['fileId'];
 		$owner = $argument['owner'];
@@ -79,7 +62,7 @@ class TranscriptionJob extends QueuedJob {
 				);
 				return;
 			}
-			$result = $this->speechToTextManager->transcribeFile($file);
+			$result = $this->speechToTextManager->transcribeFile($file, $userId, $appId);
 			$this->eventDispatcher->dispatchTyped(
 				new TranscriptionSuccessfulEvent(
 					$fileId,
@@ -89,7 +72,7 @@ class TranscriptionJob extends QueuedJob {
 					$appId,
 				)
 			);
-		} catch (PreConditionNotMetException|\RuntimeException|\InvalidArgumentException|NotFoundException|NotPermittedException|NoUserException $e) {
+		} catch (PreConditionNotMetException|\RuntimeException|\InvalidArgumentException|NotFoundException|NotPermittedException|UserNotFoundException $e) {
 			$this->logger->warning('Transcription of file ' . $fileId . ' failed', ['exception' => $e]);
 			$this->eventDispatcher->dispatchTyped(
 				new TranscriptionFailedEvent(

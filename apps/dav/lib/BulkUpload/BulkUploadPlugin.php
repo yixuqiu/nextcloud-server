@@ -1,24 +1,8 @@
 <?php
+
 /**
- * @copyright Copyright (c) 2021, Louis Chemineau <louis@chmn.me>
- *
- * @author Louis Chemineau <louis@chmn.me>
- * @author Côme Chilliet <come.chilliet@nextcloud.com>
- *
- * @license AGPL-3.0
- *
- * This code is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License, version 3,
- * as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program.  If not, see <http://www.gnu.org/licenses/>
- *
+ * SPDX-FileCopyrightText: 2021 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-only
  */
 
 namespace OCA\DAV\BulkUpload;
@@ -26,7 +10,7 @@ namespace OCA\DAV\BulkUpload;
 use OCA\DAV\Connector\Sabre\MtimeSanitizer;
 use OCP\AppFramework\Http;
 use OCP\Files\DavUtil;
-use OCP\Files\Folder;
+use OCP\Files\IUserFolder;
 use Psr\Log\LoggerInterface;
 use Sabre\DAV\Server;
 use Sabre\DAV\ServerPlugin;
@@ -34,20 +18,16 @@ use Sabre\HTTP\RequestInterface;
 use Sabre\HTTP\ResponseInterface;
 
 class BulkUploadPlugin extends ServerPlugin {
-	private Folder $userFolder;
-	private LoggerInterface $logger;
-
 	public function __construct(
-		Folder $userFolder,
-		LoggerInterface $logger
+		private IUserFolder $userFolder,
+		private LoggerInterface $logger,
 	) {
-		$this->userFolder = $userFolder;
-		$this->logger = $logger;
 	}
 
 	/**
 	 * Register listener on POST requests with the httpPost method.
 	 */
+	#[\Override]
 	public function initialize(Server $server): void {
 		$server->on('method:POST', [$this, 'httpPost'], 10);
 	}
@@ -61,7 +41,7 @@ class BulkUploadPlugin extends ServerPlugin {
 	 */
 	public function httpPost(RequestInterface $request, ResponseInterface $response): bool {
 		// Limit bulk upload to the /dav/bulk endpoint
-		if ($request->getPath() !== "bulk") {
+		if ($request->getPath() !== 'bulk') {
 			return true;
 		}
 
@@ -94,16 +74,16 @@ class BulkUploadPlugin extends ServerPlugin {
 				$node = $this->userFolder->getFirstNodeById($node->getId());
 
 				$writtenFiles[$headers['x-file-path']] = [
-					"error" => false,
-					"etag" => $node->getETag(),
-					"fileid" => DavUtil::getDavFileId($node->getId()),
-					"permissions" => DavUtil::getDavPermissions($node),
+					'error' => false,
+					'etag' => $node->getETag(),
+					'fileid' => DavUtil::getDavFileId($node->getId()),
+					'permissions' => DavUtil::getDavPermissions($node, $node->getParent()),
 				];
 			} catch (\Exception $e) {
 				$this->logger->error($e->getMessage(), ['path' => $headers['x-file-path']]);
 				$writtenFiles[$headers['x-file-path']] = [
-					"error" => true,
-					"message" => $e->getMessage(),
+					'error' => true,
+					'message' => $e->getMessage(),
 				];
 			}
 		}

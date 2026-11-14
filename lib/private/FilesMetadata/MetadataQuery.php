@@ -2,25 +2,8 @@
 
 declare(strict_types=1);
 /**
- * @copyright 2023 Maxence Lange <maxence@artificial-owl.com>
- *
- * @author Maxence Lange <maxence@artificial-owl.com>
- *
- * @license GNU AGPL version 3 or any later version
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
- *
+ * SPDX-FileCopyrightText: 2023 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
 namespace OC\FilesMetadata;
@@ -35,6 +18,7 @@ use OCP\FilesMetadata\IFilesMetadataManager;
 use OCP\FilesMetadata\IMetadataQuery;
 use OCP\FilesMetadata\Model\IFilesMetadata;
 use OCP\FilesMetadata\Model\IMetadataValueWrapper;
+use OCP\Server;
 use Psr\Log\LoggerInterface;
 
 /**
@@ -49,7 +33,7 @@ class MetadataQuery implements IMetadataQuery {
 		private string $fileTableAlias = 'fc',
 		private string $fileIdField = 'fileid',
 		private string $alias = 'meta',
-		private string $aliasIndexPrefix = 'meta_index'
+		private string $aliasIndexPrefix = 'meta_index',
 	) {
 		if ($manager instanceof IFilesMetadata) {
 			/**
@@ -59,7 +43,7 @@ class MetadataQuery implements IMetadataQuery {
 			 *
 			 * FIXME: remove support for IFilesMetadata
 			 */
-			$logger = \OCP\Server::get(LoggerInterface::class);
+			$logger = Server::get(LoggerInterface::class);
 			$logger->debug('It is deprecated to use IFilesMetadata as second parameter when calling MetadataQuery::__construct()');
 		}
 	}
@@ -69,6 +53,7 @@ class MetadataQuery implements IMetadataQuery {
 	 * @see self::extractMetadata()
 	 * @since 28.0.0
 	 */
+	#[\Override]
 	public function retrieveMetadata(): void {
 		$this->queryBuilder->selectAlias($this->alias . '.json', 'meta_json');
 		$this->queryBuilder->selectAlias($this->alias . '.sync_token', 'meta_sync_token');
@@ -86,6 +71,7 @@ class MetadataQuery implements IMetadataQuery {
 	 * @see self::retrieveMetadata()
 	 * @since 28.0.0
 	 */
+	#[\Override]
 	public function extractMetadata(array $row): IFilesMetadata {
 		$fileId = (array_key_exists($this->fileIdField, $row)) ? $row[$this->fileIdField] : 0;
 		$metadata = new FilesMetadata((int)$fileId);
@@ -105,6 +91,7 @@ class MetadataQuery implements IMetadataQuery {
 	 * @inheritDoc
 	 * @since 28.0.0
 	 */
+	#[\Override]
 	public function joinIndex(string $metadataKey, bool $enforce = false): string {
 		if (array_key_exists($metadataKey, $this->knownJoinedIndex)) {
 			return $this->knownJoinedIndex[$metadataKey];
@@ -156,6 +143,7 @@ class MetadataQuery implements IMetadataQuery {
 	 * @throws FilesMetadataNotFoundException
 	 * @since 28.0.0
 	 */
+	#[\Override]
 	public function getMetadataKeyField(string $metadataKey): string {
 		return $this->joinedTableAlias($metadataKey) . '.meta_key';
 	}
@@ -170,6 +158,7 @@ class MetadataQuery implements IMetadataQuery {
 	 * @throws FilesMetadataTypeException is metadataKey is not set as indexed
 	 * @since 28.0.0
 	 */
+	#[\Override]
 	public function getMetadataValueField(string $metadataKey): string {
 		if ($this->manager instanceof IFilesMetadataManager) {
 			/**

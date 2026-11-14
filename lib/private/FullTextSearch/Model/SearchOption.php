@@ -1,28 +1,11 @@
 <?php
 
 declare(strict_types=1);
-
 /**
- * @copyright 2018
- *
- * @author Maxence Lange <maxence@artificial-owl.com>
- *
- * @license GNU AGPL version 3 or any later version
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
- *
+ * SPDX-FileCopyrightText: 2019 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
+
 namespace OC\FullTextSearch\Model;
 
 use JsonSerializable;
@@ -101,7 +84,6 @@ final class SearchOption implements ISearchOption, JsonSerializable {
 	) {
 	}
 
-
 	/**
 	 * Set the name/key of the option.
 	 * The string should only contain alphanumerical chars and underscore.
@@ -111,6 +93,7 @@ final class SearchOption implements ISearchOption, JsonSerializable {
 	 *
 	 * @since 15.0.0
 	 */
+	#[\Override]
 	public function setName(string $name): ISearchOption {
 		$this->name = $name;
 
@@ -122,16 +105,17 @@ final class SearchOption implements ISearchOption, JsonSerializable {
 	 *
 	 * @since 15.0.0
 	 */
+	#[\Override]
 	public function getName(): string {
 		return $this->name;
 	}
-
 
 	/**
 	 * Set the title/display name of the option.
 	 *
 	 * @since 15.0.0
 	 */
+	#[\Override]
 	public function setTitle(string $title): ISearchOption {
 		$this->title = $title;
 
@@ -143,10 +127,10 @@ final class SearchOption implements ISearchOption, JsonSerializable {
 	 *
 	 * @since 15.0.0
 	 */
+	#[\Override]
 	public function getTitle(): string {
 		return $this->title;
 	}
-
 
 	/**
 	 * Set the type of the option.
@@ -154,6 +138,7 @@ final class SearchOption implements ISearchOption, JsonSerializable {
 	 *
 	 * @since 15.0.0
 	 */
+	#[\Override]
 	public function setType(string $type): ISearchOption {
 		$this->type = $type;
 
@@ -165,10 +150,10 @@ final class SearchOption implements ISearchOption, JsonSerializable {
 	 *
 	 * @since 15.0.0
 	 */
+	#[\Override]
 	public function getType(): string {
 		return $this->type;
 	}
-
 
 	/**
 	 * In case of Type is INPUT, set the size of the input field.
@@ -176,6 +161,7 @@ final class SearchOption implements ISearchOption, JsonSerializable {
 	 *
 	 * @since 15.0.0
 	 */
+	#[\Override]
 	public function setSize(string $size): ISearchOption {
 		$this->size = $size;
 
@@ -187,6 +173,7 @@ final class SearchOption implements ISearchOption, JsonSerializable {
 	 *
 	 * @since 15.0.0
 	 */
+	#[\Override]
 	public function getSize(): string {
 		return $this->size;
 	}
@@ -197,6 +184,7 @@ final class SearchOption implements ISearchOption, JsonSerializable {
 	 *
 	 * @since 15.0.0
 	 */
+	#[\Override]
 	public function setPlaceholder(string $placeholder): ISearchOption {
 		$this->placeholder = $placeholder;
 
@@ -208,6 +196,7 @@ final class SearchOption implements ISearchOption, JsonSerializable {
 	 *
 	 * @since 15.0.0
 	 */
+	#[\Override]
 	public function getPlaceholder(): string {
 		return $this->placeholder;
 	}
@@ -215,6 +204,7 @@ final class SearchOption implements ISearchOption, JsonSerializable {
 	/**
 	 * @since 15.0.0
 	 */
+	#[\Override]
 	public function jsonSerialize(): array {
 		return [
 			'name' => $this->getName(),

@@ -1,33 +1,33 @@
 <?php
 
 /**
- * Copyright (c) 2014 Robin Appelman <icewind@owncloud.com>
- * This file is licensed under the Affero General Public License version 3 or
- * later.
- * See the COPYING-README file.
+ * SPDX-FileCopyrightText: 2017-2024 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-FileCopyrightText: 2016 ownCloud, Inc.
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
 namespace Test\DB;
 
 use Doctrine\DBAL\Exception;
 use Doctrine\DBAL\ParameterType;
-use Doctrine\DBAL\Platforms\OraclePlatform;
-use Doctrine\DBAL\Platforms\SqlitePlatform;
 use Doctrine\DBAL\Schema\Schema;
 use Doctrine\DBAL\Schema\SchemaConfig;
 use OC\DB\Migrator;
 use OC\DB\OracleMigrator;
 use OC\DB\SQLiteMigrator;
 use OCP\DB\Types;
+use OCP\EventDispatcher\IEventDispatcher;
 use OCP\IConfig;
+use OCP\IDBConnection;
+use OCP\Server;
 
 /**
  * Class MigratorTest
  *
- * @group DB
  *
  * @package Test\DB
  */
+#[\PHPUnit\Framework\Attributes\Group('DB')]
 class MigratorTest extends \Test\TestCase {
 	/**
 	 * @var \Doctrine\DBAL\Connection $connection
@@ -45,23 +45,22 @@ class MigratorTest extends \Test\TestCase {
 	/** @var string */
 	private $tableNameTmp;
 
+	#[\Override]
 	protected function setUp(): void {
 		parent::setUp();
 
-		$this->config = \OC::$server->getConfig();
-		$this->connection = \OC::$server->get(\OC\DB\Connection::class);
+		$this->config = Server::get(IConfig::class);
+		$this->connection = Server::get(\OC\DB\Connection::class);
 
 		$this->tableName = $this->getUniqueTableName();
 		$this->tableNameTmp = $this->getUniqueTableName();
 	}
 
 	private function getMigrator(): Migrator {
-		$platform = $this->connection->getDatabasePlatform();
-		$random = \OC::$server->getSecureRandom();
-		$dispatcher = \OC::$server->get(\OCP\EventDispatcher\IEventDispatcher::class);
-		if ($platform instanceof SqlitePlatform) {
+		$dispatcher = Server::get(IEventDispatcher::class);
+		if ($this->connection->getDatabaseProvider() === IDBConnection::PLATFORM_SQLITE) {
 			return new SQLiteMigrator($this->connection, $this->config, $dispatcher);
-		} elseif ($platform instanceof OraclePlatform) {
+		} elseif ($this->connection->getDatabaseProvider() === IDBConnection::PLATFORM_ORACLE) {
 			return new OracleMigrator($this->connection, $this->config, $dispatcher);
 		}
 		return new Migrator($this->connection, $this->config, $dispatcher);
@@ -71,6 +70,7 @@ class MigratorTest extends \Test\TestCase {
 		return strtolower($this->getUniqueID($this->config->getSystemValueString('dbtableprefix', 'oc_') . 'test_'));
 	}
 
+	#[\Override]
 	protected function tearDown(): void {
 		// Try to delete if exists (IF EXISTS NOT SUPPORTED IN ORACLE)
 		try {
@@ -123,14 +123,13 @@ class MigratorTest extends \Test\TestCase {
 		return [$startSchema, $endSchema];
 	}
 
-
 	private function getSchemaConfig() {
 		$config = new SchemaConfig();
 		$config->setName($this->connection->getDatabase());
 		return $config;
 	}
 
-	public function testUpgrade() {
+	public function testUpgrade(): void {
 		[$startSchema, $endSchema] = $this->getDuplicateKeySchemas();
 		$migrator = $this->getMigrator();
 		$migrator->migrate($startSchema);
@@ -143,7 +142,7 @@ class MigratorTest extends \Test\TestCase {
 		$this->addToAssertionCount(1);
 	}
 
-	public function testUpgradeDifferentPrefix() {
+	public function testUpgradeDifferentPrefix(): void {
 		$oldTablePrefix = $this->config->getSystemValueString('dbtableprefix', 'oc_');
 
 		$this->config->setSystemValue('dbtableprefix', 'ownc_');
@@ -163,7 +162,7 @@ class MigratorTest extends \Test\TestCase {
 		$this->config->setSystemValue('dbtableprefix', $oldTablePrefix);
 	}
 
-	public function testInsertAfterUpgrade() {
+	public function testInsertAfterUpgrade(): void {
 		[$startSchema, $endSchema] = $this->getDuplicateKeySchemas();
 		$migrator = $this->getMigrator();
 		$migrator->migrate($startSchema);
@@ -180,7 +179,7 @@ class MigratorTest extends \Test\TestCase {
 		}
 	}
 
-	public function testAddingPrimaryKeyWithAutoIncrement() {
+	public function testAddingPrimaryKeyWithAutoIncrement(): void {
 		$startSchema = new Schema([], [], $this->getSchemaConfig());
 		$table = $startSchema->createTable($this->tableName);
 		$table->addColumn('id', 'integer');
@@ -200,7 +199,7 @@ class MigratorTest extends \Test\TestCase {
 		$this->addToAssertionCount(1);
 	}
 
-	public function testReservedKeywords() {
+	public function testReservedKeywords(): void {
 		$startSchema = new Schema([], [], $this->getSchemaConfig());
 		$table = $startSchema->createTable($this->tableName);
 		$table->addColumn('id', 'integer', ['autoincrement' => true]);
@@ -224,7 +223,7 @@ class MigratorTest extends \Test\TestCase {
 	/**
 	 * Test for nextcloud/server#36803
 	 */
-	public function testColumnCommentsInUpdate() {
+	public function testColumnCommentsInUpdate(): void {
 		$startSchema = new Schema([], [], $this->getSchemaConfig());
 		$table = $startSchema->createTable($this->tableName);
 		$table->addColumn('id', 'integer', ['autoincrement' => true, 'comment' => 'foo']);
@@ -245,14 +244,14 @@ class MigratorTest extends \Test\TestCase {
 		$this->addToAssertionCount(1);
 	}
 
-	public function testAddingForeignKey() {
+	public function testAddingForeignKey(): void {
 		$startSchema = new Schema([], [], $this->getSchemaConfig());
 		$table = $startSchema->createTable($this->tableName);
 		$table->addColumn('id', 'integer', ['autoincrement' => true]);
 		$table->addColumn('name', 'string');
 		$table->setPrimaryKey(['id']);
 
-		$fkName = "fkc";
+		$fkName = 'fkc';
 		$tableFk = $startSchema->createTable($this->tableNameTmp);
 		$tableFk->addColumn('fk_id', 'integer');
 		$tableFk->addColumn('name', 'string');
@@ -261,11 +260,10 @@ class MigratorTest extends \Test\TestCase {
 		$migrator = $this->getMigrator();
 		$migrator->migrate($startSchema);
 
-
 		$this->assertTrue($startSchema->getTable($this->tableNameTmp)->hasForeignKey($fkName));
 	}
 
-	public function dataNotNullEmptyValuesFailOracle(): array {
+	public static function dataNotNullEmptyValuesFailOracle(): array {
 		return [
 			[ParameterType::BOOLEAN, true, Types::BOOLEAN, false],
 			[ParameterType::BOOLEAN, false, Types::BOOLEAN, true],
@@ -281,13 +279,13 @@ class MigratorTest extends \Test\TestCase {
 	}
 
 	/**
-	 * @dataProvider dataNotNullEmptyValuesFailOracle
 	 *
 	 * @param int $parameterType
 	 * @param bool|int|string $value
 	 * @param string $columnType
 	 * @param bool $oracleThrows
 	 */
+	#[\PHPUnit\Framework\Attributes\DataProvider('dataNotNullEmptyValuesFailOracle')]
 	public function testNotNullEmptyValuesFailOracle(int $parameterType, $value, string $columnType, bool $oracleThrows): void {
 		$startSchema = new Schema([], [], $this->getSchemaConfig());
 		$table = $startSchema->createTable($this->tableName);
@@ -300,7 +298,7 @@ class MigratorTest extends \Test\TestCase {
 		$migrator = $this->getMigrator();
 		$migrator->migrate($startSchema);
 
-		if ($oracleThrows && $this->connection->getDatabasePlatform() instanceof OraclePlatform) {
+		if ($oracleThrows && $this->connection->getDatabaseProvider() === IDBConnection::PLATFORM_ORACLE) {
 			// Oracle can not store false|empty string in notnull columns
 			$this->expectException(\Doctrine\DBAL\Exception\NotNullConstraintViolationException::class);
 		}

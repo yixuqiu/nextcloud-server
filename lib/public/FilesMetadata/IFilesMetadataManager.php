@@ -2,30 +2,15 @@
 
 declare(strict_types=1);
 /**
- * @copyright 2023 Maxence Lange <maxence@artificial-owl.com>
- *
- * @author Maxence Lange <maxence@artificial-owl.com>
- *
- * @license GNU AGPL version 3 or any later version
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
- *
+ * SPDX-FileCopyrightText: 2023 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
 namespace OCP\FilesMetadata;
 
+use OCP\AppFramework\Attribute\Consumable;
 use OCP\DB\QueryBuilder\IQueryBuilder;
+use OCP\Files\Cache\ICacheEntry;
 use OCP\Files\Node;
 use OCP\FilesMetadata\Exceptions\FilesMetadataException;
 use OCP\FilesMetadata\Exceptions\FilesMetadataNotFoundException;
@@ -37,6 +22,7 @@ use OCP\FilesMetadata\Model\IMetadataValueWrapper;
  *
  * @since 28.0.0
  */
+#[Consumable(since: '28.0.0')]
 interface IFilesMetadataManager {
 	/** @since 28.0.0 */
 	public const PROCESS_LIVE = 1;
@@ -67,7 +53,7 @@ interface IFilesMetadataManager {
 	public function refreshMetadata(
 		Node $node,
 		int $process = self::PROCESS_LIVE,
-		string $namedEvent = ''
+		string $namedEvent = '',
 	): IFilesMetadata;
 
 	/**
@@ -79,8 +65,21 @@ interface IFilesMetadataManager {
 	 * @return IFilesMetadata
 	 * @throws FilesMetadataNotFoundException if not found
 	 * @since 28.0.0
+	 * @deprecated 36.0.0 use `getMetadataForNode` instead.
 	 */
 	public function getMetadata(int $fileId, bool $generate = false): IFilesMetadata;
+
+	/**
+	 * returns metadata of a file id
+	 *
+	 * @param Node|ICacheEntry $node file id
+	 * @param boolean $generate Generate if metadata does not exist
+	 *
+	 * @return IFilesMetadata
+	 * @throws FilesMetadataNotFoundException if not found
+	 * @since 36.0.0
+	 */
+	public function getMetadataForNode(Node|ICacheEntry $node, bool $generate = false): IFilesMetadata;
 
 	/**
 	 * returns metadata of multiple file ids
@@ -116,6 +115,16 @@ interface IFilesMetadataManager {
 	public function deleteMetadata(int $fileId): void;
 
 	/**
+	 * Delete metadata and its indexes of multiple file ids
+	 *
+	 * @param int $storage The storage id coresponding to the $fileIds
+	 * @param array<int> $fileIds file ids
+	 * @return void
+	 * @since 32.0.0
+	 */
+	public function deleteMetadataForFiles(int $storage, array $fileIds): void;
+
+	/**
 	 * generate and return a MetadataQuery to help building sql queries
 	 *
 	 * @param IQueryBuilder $qb
@@ -129,7 +138,7 @@ interface IFilesMetadataManager {
 	public function getMetadataQuery(
 		IQueryBuilder $qb,
 		string $fileTableAlias,
-		string $fileIdField
+		string $fileIdField,
 	): IMetadataQuery;
 
 	/**

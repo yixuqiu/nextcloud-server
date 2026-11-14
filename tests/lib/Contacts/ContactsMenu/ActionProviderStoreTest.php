@@ -1,28 +1,11 @@
 <?php
 
 /**
- * @copyright 2017 Christoph Wurst <christoph@winzerhof-wurst.at>
- *
- * @author 2017 Christoph Wurst <christoph@winzerhof-wurst.at>
- *
- * @license GNU AGPL version 3 or any later version
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
- *
+ * SPDX-FileCopyrightText: 2017 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
-namespace Tests\Contacts\ContactsMenu;
+namespace Test\Contacts\ContactsMenu;
 
 use OC\App\AppManager;
 use OC\Contacts\ContactsMenu\ActionProviderStore;
@@ -32,32 +15,29 @@ use OC\Contacts\ContactsMenu\Providers\ProfileProvider;
 use OCP\App\IAppManager;
 use OCP\AppFramework\QueryException;
 use OCP\Contacts\ContactsMenu\IProvider;
-use OCP\IServerContainer;
 use OCP\IUser;
 use PHPUnit\Framework\MockObject\MockObject;
+use Psr\Container\ContainerInterface;
 use Psr\Log\LoggerInterface;
 use Test\TestCase;
 
 class ActionProviderStoreTest extends TestCase {
-	/** @var IServerContainer|MockObject */
-	private $serverContainer;
-
-	/** @var IAppManager|MockObject */
-	private $appManager;
-
+	private ContainerInterface&MockObject $serverContainer;
+	private IAppManager&MockObject $appManager;
 	private ActionProviderStore $actionProviderStore;
 
+	#[\Override]
 	protected function setUp(): void {
 		parent::setUp();
 
-		$this->serverContainer = $this->createMock(IServerContainer::class);
+		$this->serverContainer = $this->createMock(ContainerInterface::class);
 		$this->appManager = $this->createMock(AppManager::class);
 		$logger = $this->createMock(LoggerInterface::class);
 
 		$this->actionProviderStore = new ActionProviderStore($this->serverContainer, $this->appManager, $logger);
 	}
 
-	public function testGetProviders() {
+	public function testGetProviders(): void {
 		$user = $this->createMock(IUser::class);
 		$provider1 = $this->createMock(ProfileProvider::class);
 		$provider2 = $this->createMock(LocalTimeProvider::class);
@@ -93,7 +73,7 @@ class ActionProviderStoreTest extends TestCase {
 		$this->assertInstanceOf(EMailProvider::class, $providers[2]);
 	}
 
-	public function testGetProvidersOfAppWithIncompleInfo() {
+	public function testGetProvidersOfAppWithIncompleInfo(): void {
 		$user = $this->createMock(IUser::class);
 		$provider1 = $this->createMock(ProfileProvider::class);
 		$provider2 = $this->createMock(LocalTimeProvider::class);
@@ -123,8 +103,7 @@ class ActionProviderStoreTest extends TestCase {
 		$this->assertInstanceOf(EMailProvider::class, $providers[2]);
 	}
 
-
-	public function testGetProvidersWithQueryException() {
+	public function testGetProvidersWithQueryException(): void {
 		$this->expectException(\Exception::class);
 
 		$user = $this->createMock(IUser::class);

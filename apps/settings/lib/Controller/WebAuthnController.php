@@ -3,45 +3,34 @@
 declare(strict_types=1);
 
 /**
- * @copyright Copyright (c) 2020, Roeland Jago Douma <roeland@famdouma.nl>
- *
- * @author Joas Schilling <coding@schilljs.com>
- * @author Roeland Jago Douma <roeland@famdouma.nl>
- * @author Kate Döen <kate.doeen@nextcloud.com>
- *
- * @license GNU AGPL version 3 or any later version
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
- *
+ * SPDX-FileCopyrightText: 2020 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
+
 namespace OCA\Settings\Controller;
 
 use OC\Authentication\WebAuthn\Manager;
 use OCA\Settings\AppInfo\Application;
 use OCP\AppFramework\Controller;
 use OCP\AppFramework\Http;
+use OCP\AppFramework\Http\Attribute\NoAdminRequired;
+use OCP\AppFramework\Http\Attribute\NoCSRFRequired;
+use OCP\AppFramework\Http\Attribute\NoSubAdminRequired;
 use OCP\AppFramework\Http\Attribute\OpenAPI;
+use OCP\AppFramework\Http\Attribute\PasswordConfirmationRequired;
+use OCP\AppFramework\Http\Attribute\UseSession;
 use OCP\AppFramework\Http\JSONResponse;
+use OCP\EventDispatcher\IEventDispatcher;
 use OCP\IRequest;
 use OCP\ISession;
 use OCP\IUserSession;
+use OCP\Log\Audit\CriticalActionPerformedEvent;
 use Psr\Log\LoggerInterface;
 use Webauthn\PublicKeyCredentialCreationOptions;
 
 #[OpenAPI(scope: OpenAPI::SCOPE_IGNORE)]
 class WebAuthnController extends Controller {
-	private const WEBAUTHN_REGISTRATION = 'webauthn_registration';
+	private const string WEBAUTHN_REGISTRATION = 'webauthn_registration';
 
 	public function __construct(
 		IRequest $request,
@@ -49,17 +38,16 @@ class WebAuthnController extends Controller {
 		private Manager $manager,
 		private IUserSession $userSession,
 		private ISession $session,
+		private IEventDispatcher $eventDispatcher,
 	) {
 		parent::__construct(Application::APP_ID, $request);
 	}
 
-	/**
-	 * @NoAdminRequired
-	 * @NoSubAdminRequired
-	 * @PasswordConfirmationRequired
-	 * @UseSession
-	 * @NoCSRFRequired
-	 */
+	#[NoSubAdminRequired]
+	#[NoAdminRequired]
+	#[PasswordConfirmationRequired]
+	#[UseSession]
+	#[NoCSRFRequired]
 	public function startRegistration(): JSONResponse {
 		$this->logger->debug('Starting WebAuthn registration');
 
@@ -71,12 +59,10 @@ class WebAuthnController extends Controller {
 		return new JSONResponse($credentialOptions);
 	}
 
-	/**
-	 * @NoAdminRequired
-	 * @NoSubAdminRequired
-	 * @PasswordConfirmationRequired
-	 * @UseSession
-	 */
+	#[NoSubAdminRequired]
+	#[NoAdminRequired]
+	#[PasswordConfirmationRequired]
+	#[UseSession]
 	public function finishRegistration(string $name, string $data): JSONResponse {
 		$this->logger->debug('Finishing WebAuthn registration');
 
@@ -90,18 +76,30 @@ class WebAuthnController extends Controller {
 
 		$this->session->remove(self::WEBAUTHN_REGISTRATION);
 
-		return new JSONResponse($this->manager->finishRegister($publicKeyCredentialCreationOptions, $name, $data));
+		$credential = $this->manager->finishRegister($publicKeyCredentialCreationOptions, $name, $data);
+		$this->eventDispatcher->dispatchTyped(new CriticalActionPerformedEvent(
+			'WebAuthn device with ID "%s" was added',
+			['deviceId' => $credential->getId()],
+			false,
+			'auth.webauthn_device.added',
+		));
+
+		return new JSONResponse($credential);
 	}
 
-	/**
-	 * @NoAdminRequired
-	 * @NoSubAdminRequired
-	 * @PasswordConfirmationRequired
-	 */
+	#[NoSubAdminRequired]
+	#[NoAdminRequired]
+	#[PasswordConfirmationRequired]
 	public function deleteRegistration(int $id): JSONResponse {
 		$this->logger->debug('Finishing WebAuthn registration');
 
 		$this->manager->deleteRegistration($this->userSession->getUser(), $id);
+		$this->eventDispatcher->dispatchTyped(new CriticalActionPerformedEvent(
+			'WebAuthn device with ID "%s" was removed',
+			['deviceId' => $id],
+			false,
+			'auth.webauthn_device.removed',
+		));
 
 		return new JSONResponse([]);
 	}

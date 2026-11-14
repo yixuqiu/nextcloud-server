@@ -3,26 +3,10 @@
 declare(strict_types=1);
 
 /**
- * @copyright 2021 Anna Larch <anna.larch@gmx.net>
- *
- * @author Anna Larch <anna.larch@gmx.net>
- *
- * @license GNU AGPL version 3 or any later version
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
- *
+ * SPDX-FileCopyrightText: 2021 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
+
 namespace OC\Calendar;
 
 use OCP\Calendar\ICalendarQuery;
@@ -56,6 +40,7 @@ class CalendarQuery implements ICalendarQuery {
 		$this->principalUri = $principalUri;
 	}
 
+	#[\Override]
 	public function setSearchPattern(string $pattern): void {
 		$this->searchPattern = $pattern;
 	}
@@ -64,6 +49,7 @@ class CalendarQuery implements ICalendarQuery {
 		return $this->searchPattern;
 	}
 
+	#[\Override]
 	public function addSearchProperty(string $value): void {
 		$this->searchProperties[] = $value;
 	}
@@ -72,6 +58,7 @@ class CalendarQuery implements ICalendarQuery {
 		return $this->searchProperties;
 	}
 
+	#[\Override]
 	public function addSearchCalendar(string $calendarUri): void {
 		$this->calendarUris[] = $calendarUri;
 	}
@@ -87,6 +74,7 @@ class CalendarQuery implements ICalendarQuery {
 		return $this->limit;
 	}
 
+	#[\Override]
 	public function setLimit(int $limit): void {
 		$this->limit = $limit;
 	}
@@ -95,18 +83,22 @@ class CalendarQuery implements ICalendarQuery {
 		return $this->offset;
 	}
 
+	#[\Override]
 	public function setOffset(int $offset): void {
 		$this->offset = $offset;
 	}
 
+	#[\Override]
 	public function addType(string $value): void {
 		$this->options['types'][] = $value;
 	}
 
+	#[\Override]
 	public function setTimerangeStart(\DateTimeImmutable $startTime): void {
 		$this->options['timerange']['start'] = $startTime;
 	}
 
+	#[\Override]
 	public function setTimerangeEnd(\DateTimeImmutable $endTime): void {
 		$this->options['timerange']['end'] = $endTime;
 	}

@@ -1,28 +1,11 @@
 <?php
 
 /**
- * @copyright 2017 Christoph Wurst <christoph@winzerhof-wurst.at>
- *
- * @author 2017 Christoph Wurst <christoph@winzerhof-wurst.at>
- *
- * @license GNU AGPL version 3 or any later version
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
- *
+ * SPDX-FileCopyrightText: 2017 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
-namespace Tests\Contacts\ContactsMenu;
+namespace Test\Contacts\ContactsMenu;
 
 use OC\Contacts\ContactsMenu\ActionProviderStore;
 use OC\Contacts\ContactsMenu\ContactsStore;
@@ -33,33 +16,16 @@ use OCP\Constants;
 use OCP\Contacts\ContactsMenu\IProvider;
 use OCP\IConfig;
 use OCP\IUser;
-use PHPUnit\Framework\MockObject\MockObject;
 use Test\TestCase;
 
 class ManagerTest extends TestCase {
-	/** @var ContactsStore|MockObject */
-	private $contactsStore;
-
-	/** @var IAppManager|MockObject */
-	private $appManager;
-
-	/** @var IConfig|MockObject */
-	private $config;
-
-	/** @var ActionProviderStore|MockObject */
-	private $actionProviderStore;
-
 	private Manager $manager;
 
+	#[\Override]
 	protected function setUp(): void {
 		parent::setUp();
 
-		$this->contactsStore = $this->createMock(ContactsStore::class);
-		$this->actionProviderStore = $this->createMock(ActionProviderStore::class);
-		$this->appManager = $this->createMock(IAppManager::class);
-		$this->config = $this->createMock(IConfig::class);
-
-		$this->manager = new Manager($this->contactsStore, $this->actionProviderStore, $this->appManager, $this->config);
+		$this->manager = $this->createInstanceWithMocks(Manager::class);
 	}
 
 	private function generateTestEntries(): array {
@@ -74,30 +40,29 @@ class ManagerTest extends TestCase {
 		return $entries;
 	}
 
-	public function testGetFilteredEntries() {
+	public function testGetFilteredEntries(): void {
 		$filter = 'con';
 		$user = $this->createMock(IUser::class);
 		$entries = $this->generateTestEntries();
 		$provider = $this->createMock(IProvider::class);
 
-		$this->config->expects($this->exactly(2))
+		$this->getAutoMock(IConfig::class)->expects($this->exactly(2))
 			->method('getSystemValueInt')
-			->withConsecutive(
-				['sharing.maxAutocompleteResults', Constants::SHARING_MAX_AUTOCOMPLETE_RESULTS_DEFAULT],
-				['sharing.minSearchStringLength', 0]
-			)
-			->willReturnOnConsecutiveCalls(25, 0);
-		$this->contactsStore->expects($this->once())
+			->willReturnMap([
+				['sharing.maxAutocompleteResults', Constants::SHARING_MAX_AUTOCOMPLETE_RESULTS_DEFAULT, 25],
+				['sharing.minSearchStringLength', 0, 0],
+			]);
+		$this->getAutoMock(ContactsStore::class)->expects($this->once())
 			->method('getContacts')
 			->with($user, $filter)
 			->willReturn($entries);
-		$this->actionProviderStore->expects($this->once())
+		$this->getAutoMock(ActionProviderStore::class)->expects($this->once())
 			->method('getProviders')
 			->with($user)
 			->willReturn([$provider]);
 		$provider->expects($this->exactly(25))
 			->method('process');
-		$this->appManager->expects($this->once())
+		$this->getAutoMock(IAppManager::class)->expects($this->once())
 			->method('isEnabledForUser')
 			->with($this->equalTo('contacts'), $user)
 			->willReturn(false);
@@ -111,30 +76,29 @@ class ManagerTest extends TestCase {
 		$this->assertEquals($expected, $data);
 	}
 
-	public function testGetFilteredEntriesLimit() {
+	public function testGetFilteredEntriesLimit(): void {
 		$filter = 'con';
 		$user = $this->createMock(IUser::class);
 		$entries = $this->generateTestEntries();
 		$provider = $this->createMock(IProvider::class);
 
-		$this->config->expects($this->exactly(2))
+		$this->getAutoMock(IConfig::class)->expects($this->exactly(2))
 			->method('getSystemValueInt')
-			->withConsecutive(
-				['sharing.maxAutocompleteResults', Constants::SHARING_MAX_AUTOCOMPLETE_RESULTS_DEFAULT],
-				['sharing.minSearchStringLength', 0]
-			)
-			->willReturnOnConsecutiveCalls(3, 0);
-		$this->contactsStore->expects($this->once())
+			->willReturnMap([
+				['sharing.maxAutocompleteResults', Constants::SHARING_MAX_AUTOCOMPLETE_RESULTS_DEFAULT, 3],
+				['sharing.minSearchStringLength', 0, 0],
+			]);
+		$this->getAutoMock(ContactsStore::class)->expects($this->once())
 			->method('getContacts')
 			->with($user, $filter)
 			->willReturn($entries);
-		$this->actionProviderStore->expects($this->once())
+		$this->getAutoMock(ActionProviderStore::class)->expects($this->once())
 			->method('getProviders')
 			->with($user)
 			->willReturn([$provider]);
 		$provider->expects($this->exactly(3))
 			->method('process');
-		$this->appManager->expects($this->once())
+		$this->getAutoMock(IAppManager::class)->expects($this->once())
 			->method('isEnabledForUser')
 			->with($this->equalTo('contacts'), $user)
 			->willReturn(false);
@@ -148,19 +112,18 @@ class ManagerTest extends TestCase {
 		$this->assertEquals($expected, $data);
 	}
 
-	public function testGetFilteredEntriesMinSearchStringLength() {
+	public function testGetFilteredEntriesMinSearchStringLength(): void {
 		$filter = 'con';
 		$user = $this->createMock(IUser::class);
 		$provider = $this->createMock(IProvider::class);
 
-		$this->config->expects($this->exactly(2))
+		$this->getAutoMock(IConfig::class)->expects($this->exactly(2))
 			->method('getSystemValueInt')
-			->withConsecutive(
-				['sharing.maxAutocompleteResults', Constants::SHARING_MAX_AUTOCOMPLETE_RESULTS_DEFAULT],
-				['sharing.minSearchStringLength', 0]
-			)
-			->willReturnOnConsecutiveCalls(3, 4);
-		$this->appManager->expects($this->once())
+			->willReturnMap([
+				['sharing.maxAutocompleteResults', Constants::SHARING_MAX_AUTOCOMPLETE_RESULTS_DEFAULT, 3],
+				['sharing.minSearchStringLength', 0, 4],
+			]);
+		$this->getAutoMock(IAppManager::class)->expects($this->once())
 			->method('isEnabledForUser')
 			->with($this->equalTo('contacts'), $user)
 			->willReturn(false);
@@ -174,18 +137,18 @@ class ManagerTest extends TestCase {
 		$this->assertEquals($expected, $data);
 	}
 
-	public function testFindOne() {
+	public function testFindOne(): void {
 		$shareTypeFilter = 42;
 		$shareWithFilter = 'foobar';
 
 		$user = $this->createMock(IUser::class);
 		$entry = current($this->generateTestEntries());
 		$provider = $this->createMock(IProvider::class);
-		$this->contactsStore->expects($this->once())
+		$this->getAutoMock(ContactsStore::class)->expects($this->once())
 			->method('findOne')
 			->with($user, $shareTypeFilter, $shareWithFilter)
 			->willReturn($entry);
-		$this->actionProviderStore->expects($this->once())
+		$this->getAutoMock(ActionProviderStore::class)->expects($this->once())
 			->method('getProviders')
 			->with($user)
 			->willReturn([$provider]);
@@ -197,17 +160,17 @@ class ManagerTest extends TestCase {
 		$this->assertEquals($entry, $data);
 	}
 
-	public function testFindOne404() {
+	public function testFindOne404(): void {
 		$shareTypeFilter = 42;
 		$shareWithFilter = 'foobar';
 
 		$user = $this->createMock(IUser::class);
 		$provider = $this->createMock(IProvider::class);
-		$this->contactsStore->expects($this->once())
+		$this->getAutoMock(ContactsStore::class)->expects($this->once())
 			->method('findOne')
 			->with($user, $shareTypeFilter, $shareWithFilter)
 			->willReturn(null);
-		$this->actionProviderStore->expects($this->never())
+		$this->getAutoMock(ActionProviderStore::class)->expects($this->never())
 			->method('getProviders')
 			->with($user)
 			->willReturn([$provider]);

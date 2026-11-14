@@ -1,28 +1,15 @@
 <?php
+
+declare(strict_types=1);
+
 /**
- * @copyright Copyright (c) 2022 Carl Schwan <carl@carlschwan.eu>
- *
- * @author Carl Schwan <carl@carlschwan.eu>
- *
- * @license GNU AGPL version 3 or any later version
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
- *
+ * SPDX-FileCopyrightText: 2022 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
 namespace OCA\AdminAudit;
 
+use OCP\AppFramework\Services\IAppConfig;
 use OCP\IConfig;
 use OCP\Log\ILogFactory;
 use Psr\Log\LoggerInterface;
@@ -34,7 +21,11 @@ class AuditLogger implements IAuditLogger {
 
 	private LoggerInterface $parentLogger;
 
-	public function __construct(ILogFactory $logFactory, IConfig $config) {
+	public function __construct(
+		ILogFactory $logFactory,
+		IAppConfig $appConfig,
+		IConfig $config,
+	) {
 		$auditType = $config->getSystemValueString('log_type_audit', 'file');
 		$defaultTag = $config->getSystemValueString('syslog_tag', 'Nextcloud');
 		$auditTag = $config->getSystemValueString('syslog_tag_audit', $defaultTag);
@@ -43,44 +34,53 @@ class AuditLogger implements IAuditLogger {
 		if ($auditType === 'file' && !$logFile) {
 			$default = $config->getSystemValue('datadirectory', \OC::$SERVERROOT . '/data') . '/audit.log';
 			// Legacy way was appconfig, now it's paralleled with the normal log config
-			$logFile = $config->getAppValue('admin_audit', 'logfile', $default);
+			$logFile = $appConfig->getAppValueString('logfile', $default);
 		}
 
-		$this->parentLogger = $logFactory->getCustomPsrLogger($logFile, $auditType, $auditTag);
+		$this->parentLogger = $logFactory->getCustomPsrLogger($logFile, $auditType, $auditTag, true);
 	}
 
+	#[\Override]
 	public function emergency($message, array $context = []): void {
 		$this->parentLogger->emergency($message, $context);
 	}
 
+	#[\Override]
 	public function alert($message, array $context = []): void {
 		$this->parentLogger->alert($message, $context);
 	}
 
+	#[\Override]
 	public function critical($message, array $context = []): void {
 		$this->parentLogger->critical($message, $context);
 	}
 
+	#[\Override]
 	public function error($message, array $context = []): void {
 		$this->parentLogger->error($message, $context);
 	}
 
+	#[\Override]
 	public function warning($message, array $context = []): void {
 		$this->parentLogger->warning($message, $context);
 	}
 
+	#[\Override]
 	public function notice($message, array $context = []): void {
 		$this->parentLogger->notice($message, $context);
 	}
 
+	#[\Override]
 	public function info($message, array $context = []): void {
 		$this->parentLogger->info($message, $context);
 	}
 
+	#[\Override]
 	public function debug($message, array $context = []): void {
 		$this->parentLogger->debug($message, $context);
 	}
 
+	#[\Override]
 	public function log($level, $message, array $context = []): void {
 		$this->parentLogger->log($level, $message, $context);
 	}

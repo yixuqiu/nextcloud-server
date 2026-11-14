@@ -3,26 +3,8 @@
 declare(strict_types=1);
 
 /**
- * @copyright 2017 Christoph Wurst <christoph@winzerhof-wurst.at>
- *
- * @author Christoph Wurst <christoph@winzerhof-wurst.at>
- * @author Roeland Jago Douma <roeland@famdouma.nl>
- *
- * @license GNU AGPL version 3 or any later version
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
- *
+ * SPDX-FileCopyrightText: 2017 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
 namespace OC\Contacts\ContactsMenu;
@@ -66,6 +48,7 @@ class Entry implements IEntry {
 		$this->fullName = $displayName;
 	}
 
+	#[\Override]
 	public function getFullName(): string {
 		return $this->fullName;
 	}
@@ -77,6 +60,7 @@ class Entry implements IEntry {
 	/**
 	 * @return string[]
 	 */
+	#[\Override]
 	public function getEMailAddresses(): array {
 		return $this->emailAddresses;
 	}
@@ -85,6 +69,7 @@ class Entry implements IEntry {
 		$this->avatar = $avatar;
 	}
 
+	#[\Override]
 	public function getAvatar(): ?string {
 		return $this->avatar;
 	}
@@ -105,11 +90,13 @@ class Entry implements IEntry {
 		return $this->profileUrl;
 	}
 
+	#[\Override]
 	public function addAction(IAction $action): void {
 		$this->actions[] = $action;
 		$this->sortActions();
 	}
 
+	#[\Override]
 	public function setStatus(string $status,
 		?string $statusMessage = null,
 		?int $statusMessageTimestamp = null,
@@ -156,6 +143,7 @@ class Entry implements IEntry {
 		$this->properties = array_merge($this->properties, $properties);
 	}
 
+	#[\Override]
 	public function getProperty(string $key): mixed {
 		if (!isset($this->properties[$key])) {
 			return null;
@@ -166,6 +154,7 @@ class Entry implements IEntry {
 	/**
 	 * @return array{id: int|string|null, fullName: string, avatar: string|null, topAction: mixed, actions: array, lastMessage: '', emailAddresses: string[], profileTitle: string|null, profileUrl: string|null, status: string|null, statusMessage: null|string, statusMessageTimestamp: null|int, statusIcon: null|string, isUser: bool, uid: mixed}
 	 */
+	#[\Override]
 	public function jsonSerialize(): array {
 		$topAction = !empty($this->actions) ? $this->actions[0]->jsonSerialize() : null;
 		$otherActions = array_map(function (IAction $action) {

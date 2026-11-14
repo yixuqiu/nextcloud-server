@@ -1,42 +1,14 @@
 <?php
 
 declare(strict_types=1);
-
 /**
- * @copyright Copyright (c) 2016, ownCloud, Inc.
- *
- * @author Arne Hamann <kontakt+github@arne.email>
- * @author Branko Kokanovic <branko@kokanovic.org>
- * @author Carsten Wiedmann <carsten_sttgt@gmx.de>
- * @author Christoph Wurst <christoph@winzerhof-wurst.at>
- * @author Jared Boone <jared.boone@gmail.com>
- * @author Joas Schilling <coding@schilljs.com>
- * @author Julius Härtl <jus@bitgrid.net>
- * @author kevin147147 <kevintamool@gmail.com>
- * @author Lukas Reschke <lukas@statuscode.ch>
- * @author Morris Jobke <hey@morrisjobke.de>
- * @author Roeland Jago Douma <roeland@famdouma.nl>
- * @author Tekhnee <info@tekhnee.org>
- *
- * @license AGPL-3.0
- *
- * This code is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License, version 3,
- * as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program. If not, see <http://www.gnu.org/licenses/>
- *
+ * SPDX-FileCopyrightText: 2016-2024 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-FileCopyrightText: 2016 ownCloud, Inc.
+ * SPDX-License-Identifier: AGPL-3.0-only
  */
+
 namespace OC\Mail;
 
-use Egulias\EmailValidator\EmailValidator;
-use Egulias\EmailValidator\Validation\RFCValidation;
 use OCP\Defaults;
 use OCP\EventDispatcher\IEventDispatcher;
 use OCP\IBinaryFinder;
@@ -47,12 +19,16 @@ use OCP\L10N\IFactory;
 use OCP\Mail\Events\BeforeMessageSent;
 use OCP\Mail\IAttachment;
 use OCP\Mail\IEMailTemplate;
+use OCP\Mail\IEmailValidator;
 use OCP\Mail\IMailer;
 use OCP\Mail\IMessage;
+use OCP\Server;
+use OCP\Util;
 use Psr\Log\LoggerInterface;
 use Symfony\Component\Mailer\Exception\TransportExceptionInterface;
 use Symfony\Component\Mailer\Mailer as SymfonyMailer;
 use Symfony\Component\Mailer\MailerInterface;
+use Symfony\Component\Mailer\Transport\NullTransport;
 use Symfony\Component\Mailer\Transport\SendmailTransport;
 use Symfony\Component\Mailer\Transport\Smtp\EsmtpTransport;
 use Symfony\Component\Mailer\Transport\Smtp\Stream\SocketStream;
@@ -65,7 +41,7 @@ use Symfony\Component\Mime\Exception\RfcComplianceException;
  *
  * Example usage:
  *
- * 	$mailer = \OC::$server->getMailer();
+ * 	$mailer = \OC::$server->get(\OCP\Mail\IMailer::class);
  * 	$message = $mailer->createMessage();
  * 	$message->setSubject('Your Subject');
  * 	$message->setFrom(array('cloud@domain.org' => 'ownCloud Notifier'));
@@ -78,22 +54,30 @@ use Symfony\Component\Mime\Exception\RfcComplianceException;
  * @package OC\Mail
  */
 class Mailer implements IMailer {
+	// Do not move this block or change it's content without contacting the release crew
+	public const DEFAULT_DIMENSIONS = '252x120';
+	// Do not move this block or change it's content without contacting the release crew
+
+	public const MAX_LOGO_SIZE = 105;
+
 	private ?MailerInterface $instance = null;
 
 	public function __construct(
-		private IConfig          $config,
-		private LoggerInterface  $logger,
-		private Defaults         $defaults,
-		private IURLGenerator    $urlGenerator,
-		private IL10N            $l10n,
+		private IConfig $config,
+		private LoggerInterface $logger,
+		private Defaults $defaults,
+		private IURLGenerator $urlGenerator,
+		private IL10N $l10n,
 		private IEventDispatcher $dispatcher,
-		private IFactory         $l10nFactory,
+		private IFactory $l10nFactory,
+		private IEmailValidator $emailValidator,
 	) {
 	}
 
 	/**
 	 * Creates a new message object that can be passed to send()
 	 */
+	#[\Override]
 	public function createMessage(): Message {
 		$plainTextOnly = $this->config->getSystemValueBool('mail_send_plaintext_only', false);
 		return new Message(new Email(), $plainTextOnly);
@@ -105,6 +89,7 @@ class Mailer implements IMailer {
 	 * @param string|null $contentType
 	 * @since 13.0.0
 	 */
+	#[\Override]
 	public function createAttachment($data = null, $filename = null, $contentType = null): IAttachment {
 		return new Attachment($data, $filename, $contentType);
 	}
@@ -113,6 +98,7 @@ class Mailer implements IMailer {
 	 * @param string|null $contentType
 	 * @since 13.0.0
 	 */
+	#[\Override]
 	public function createAttachmentFromPath(string $path, $contentType = null): IAttachment {
 		return new Attachment(null, null, $contentType, $path);
 	}
@@ -122,7 +108,33 @@ class Mailer implements IMailer {
 	 *
 	 * @since 12.0.0
 	 */
+	#[\Override]
 	public function createEMailTemplate(string $emailId, array $data = []): IEMailTemplate {
+		$logoDimensions = $this->config->getAppValue('theming', 'logoDimensions', self::DEFAULT_DIMENSIONS);
+		if (str_contains($logoDimensions, 'x')) {
+			[$width, $height] = explode('x', $logoDimensions);
+			$width = (int)$width;
+			$height = (int)$height;
+
+			if ($width > self::MAX_LOGO_SIZE || $height > self::MAX_LOGO_SIZE) {
+				if ($width === $height) {
+					$logoWidth = self::MAX_LOGO_SIZE;
+					$logoHeight = self::MAX_LOGO_SIZE;
+				} elseif ($width > $height) {
+					$logoWidth = self::MAX_LOGO_SIZE;
+					$logoHeight = (int)(($height / $width) * self::MAX_LOGO_SIZE);
+				} else {
+					$logoWidth = (int)(($width / $height) * self::MAX_LOGO_SIZE);
+					$logoHeight = self::MAX_LOGO_SIZE;
+				}
+			} else {
+				$logoWidth = $width;
+				$logoHeight = $height;
+			}
+		} else {
+			$logoWidth = $logoHeight = null;
+		}
+
 		$class = $this->config->getSystemValueString('mail_template_class', '');
 
 		if ($class !== '' && class_exists($class) && is_a($class, EMailTemplate::class, true)) {
@@ -130,6 +142,8 @@ class Mailer implements IMailer {
 				$this->defaults,
 				$this->urlGenerator,
 				$this->l10nFactory,
+				$logoWidth,
+				$logoHeight,
 				$emailId,
 				$data
 			);
@@ -139,6 +153,8 @@ class Mailer implements IMailer {
 			$this->defaults,
 			$this->urlGenerator,
 			$this->l10nFactory,
+			$logoWidth,
+			$logoHeight,
 			$emailId,
 			$data
 		);
@@ -154,6 +170,7 @@ class Mailer implements IMailer {
 	 * @param IMessage $message Message to send
 	 * @return string[] $failedRecipients
 	 */
+	#[\Override]
 	public function send(IMessage $message): array {
 		$debugMode = $this->config->getSystemValueBool('mail_smtpdebug', false);
 
@@ -162,7 +179,7 @@ class Mailer implements IMailer {
 		}
 
 		if (empty($message->getFrom())) {
-			$message->setFrom([\OCP\Util::getDefaultEmailAddress('no-reply') => $this->defaults->getName()]);
+			$message->setFrom([Util::getDefaultEmailAddress('no-reply') => $this->defaults->getName()]);
 		}
 
 		$mailer = $this->getInstance();
@@ -181,7 +198,7 @@ class Mailer implements IMailer {
 			$recipients = array_merge($message->getTo(), $message->getCc(), $message->getBcc());
 			$failedRecipients = [];
 
-			array_walk($recipients, function ($value, $key) use (&$failedRecipients) {
+			array_walk($recipients, function ($value, $key) use (&$failedRecipients): void {
 				if (is_numeric($key)) {
 					$failedRecipients[] = $value;
 				} else {
@@ -195,15 +212,15 @@ class Mailer implements IMailer {
 		try {
 			$mailer->send($message->getSymfonyEmail());
 		} catch (TransportExceptionInterface $e) {
-			$logMessage = sprintf('Sending mail to "%s" with subject "%s" failed', print_r($message->getTo(), true), $message->getSubject());
-			$this->logger->debug($logMessage, ['app' => 'core', 'exception' => $e]);
+			$logMessage = sprintf('Sending mail to "%s" with subject "%s" failed', json_encode($message->getTo()), $message->getSubject());
+			$this->logger->error($logMessage, ['app' => 'core', 'exception' => $e]);
 			if ($debugMode) {
 				$this->logger->debug($e->getDebug(), ['app' => 'core']);
 			}
 			$recipients = array_merge($message->getTo(), $message->getCc(), $message->getBcc());
 			$failedRecipients = [];
 
-			array_walk($recipients, function ($value, $key) use (&$failedRecipients) {
+			array_walk($recipients, function ($value, $key) use (&$failedRecipients): void {
 				if (is_numeric($key)) {
 					$failedRecipients[] = $value;
 				} else {
@@ -215,28 +232,20 @@ class Mailer implements IMailer {
 		}
 
 		// Debugging logging
-		$logMessage = sprintf('Sent mail to "%s" with subject "%s"', print_r($message->getTo(), true), $message->getSubject());
+		$logMessage = sprintf('Sent mail to "%s" with subject "%s"', json_encode($message->getTo()), $message->getSubject());
 		$this->logger->debug($logMessage, ['app' => 'core']);
 
 		return [];
 	}
 
 	/**
-	 * @deprecated 26.0.0 Implicit validation is done in \OC\Mail\Message::setRecipients
-	 *                    via \Symfony\Component\Mime\Address::__construct
-	 *
 	 * @param string $email Email address to be validated
 	 * @return bool True if the mail address is valid, false otherwise
+	 * @deprecated 32.0.0 use {@see IEmailValidator::isValid()} instead
 	 */
+	#[\Override]
 	public function validateMailAddress(string $email): bool {
-		if ($email === '') {
-			// Shortcut: empty addresses are never valid
-			return false;
-		}
-		$validator = new EmailValidator();
-		$validation = new RFCValidation();
-
-		return $validator->isValid($email, $validation);
+		return $this->emailValidator->isValid($email);
 	}
 
 	protected function getInstance(): MailerInterface {
@@ -244,9 +253,10 @@ class Mailer implements IMailer {
 			return $this->instance;
 		}
 
-		$transport = null;
-
 		switch ($this->config->getSystemValueString('mail_smtpmode', 'smtp')) {
+			case 'null':
+				$transport = new NullTransport();
+				break;
 			case 'sendmail':
 				$transport = $this->getSendMailInstance();
 				break;
@@ -256,14 +266,16 @@ class Mailer implements IMailer {
 				break;
 		}
 
-		return new SymfonyMailer($transport);
+		$this->instance = new SymfonyMailer($transport);
+
+		return $this->instance;
 	}
 
 	/**
 	 * Returns the SMTP transport
 	 *
 	 * Only supports ssl/tls
-	 * starttls is not enforcable with Symfony Mailer but might be available
+	 * starttls is not enforceable with Symfony Mailer but might be available
 	 * via the automatic config (Symfony Mailer internal)
 	 *
 	 * @return EsmtpTransport
@@ -322,9 +334,11 @@ class Mailer implements IMailer {
 				$binaryPath = '/var/qmail/bin/sendmail';
 				break;
 			default:
-				$sendmail = \OCP\Server::get(IBinaryFinder::class)->findBinaryPath('sendmail');
-				if ($sendmail === null) {
+				$sendmail = Server::get(IBinaryFinder::class)->findBinaryPath('sendmail');
+				if ($sendmail === false) {
+					// fallback (though not sure what good it'll do)
 					$sendmail = '/usr/sbin/sendmail';
+					$this->logger->debug('sendmail binary search failed, using fallback ' . $sendmail, ['app' => 'core']);
 				}
 				$binaryPath = $sendmail;
 				break;
@@ -335,6 +349,7 @@ class Mailer implements IMailer {
 			default => ' -bs',
 		};
 
+		$this->logger->debug('Using sendmail binary: ' . $binaryPath, ['app' => 'core']);
 		return new SendmailTransport($binaryPath . $binaryParam, null, $this->logger);
 	}
 }

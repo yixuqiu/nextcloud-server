@@ -3,25 +3,8 @@
 declare(strict_types=1);
 
 /**
- * @copyright 2023, Maxence Lange <maxence@artificial-owl.com>
- *
- * @author Maxence Lange <maxence@artificial-owl.com>
- *
- * @license GNU AGPL version 3 or any later version
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
- *
+ * SPDX-FileCopyrightText: 2023 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
 namespace OC\OCM\Model;
@@ -33,7 +16,7 @@ use OCP\OCM\IOCMResource;
  */
 class OCMResource implements IOCMResource {
 	private string $name = '';
-	/** @var string[] */
+	/** @var list<string> */
 	private array $shareTypes = [];
 	/** @var array<string, string> */
 	private array $protocols = [];
@@ -43,6 +26,7 @@ class OCMResource implements IOCMResource {
 	 *
 	 * @return $this
 	 */
+	#[\Override]
 	public function setName(string $name): static {
 		$this->name = $name;
 
@@ -52,15 +36,17 @@ class OCMResource implements IOCMResource {
 	/**
 	 * @return string
 	 */
+	#[\Override]
 	public function getName(): string {
 		return $this->name;
 	}
 
 	/**
-	 * @param string[] $shareTypes
+	 * @param list<string> $shareTypes
 	 *
 	 * @return $this
 	 */
+	#[\Override]
 	public function setShareTypes(array $shareTypes): static {
 		$this->shareTypes = $shareTypes;
 
@@ -68,8 +54,9 @@ class OCMResource implements IOCMResource {
 	}
 
 	/**
-	 * @return string[]
+	 * @return list<string>
 	 */
+	#[\Override]
 	public function getShareTypes(): array {
 		return $this->shareTypes;
 	}
@@ -79,6 +66,7 @@ class OCMResource implements IOCMResource {
 	 *
 	 * @return $this
 	 */
+	#[\Override]
 	public function setProtocols(array $protocols): static {
 		$this->protocols = $protocols;
 
@@ -88,6 +76,7 @@ class OCMResource implements IOCMResource {
 	/**
 	 * @return array<string, string>
 	 */
+	#[\Override]
 	public function getProtocols(): array {
 		return $this->protocols;
 	}
@@ -100,19 +89,21 @@ class OCMResource implements IOCMResource {
 	 * @return $this
 	 * @see self::jsonSerialize()
 	 */
+	#[\Override]
 	public function import(array $data): static {
 		return $this->setName((string)($data['name'] ?? ''))
-					->setShareTypes($data['shareTypes'] ?? [])
-					->setProtocols($data['protocols'] ?? []);
+			->setShareTypes($data['shareTypes'] ?? [])
+			->setProtocols($data['protocols'] ?? []);
 	}
 
 	/**
 	 * @return array{
 	 *     name: string,
-	 *     shareTypes: string[],
+	 *     shareTypes: list<string>,
 	 *     protocols: array<string, string>
 	 * }
 	 */
+	#[\Override]
 	public function jsonSerialize(): array {
 		return [
 			'name' => $this->getName(),

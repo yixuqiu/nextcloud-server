@@ -3,33 +3,17 @@
 declare(strict_types=1);
 
 /**
- * @copyright 2018, Roeland Jago Douma <roeland@famdouma.nl>
- *
- * @author Iscle <albertiscle9@gmail.com>
- * @author Roeland Jago Douma <roeland@famdouma.nl>
- * @author Kate Döen <kate.doeen@nextcloud.com>
- *
- * @license GNU AGPL version 3 or any later version
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
- *
+ * SPDX-FileCopyrightText: 2018 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
+
 namespace OCA\DAV\Controller;
 
+use NCU\AppFramework\Http\Attribute\TokenScope;
 use OCA\DAV\Db\Direct;
 use OCA\DAV\Db\DirectMapper;
 use OCP\AppFramework\Http;
+use OCP\AppFramework\Http\Attribute\NoAdminRequired;
 use OCP\AppFramework\Http\DataResponse;
 use OCP\AppFramework\OCS\OCSBadRequestException;
 use OCP\AppFramework\OCS\OCSForbiddenException;
@@ -39,57 +23,31 @@ use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\EventDispatcher\IEventDispatcher;
 use OCP\Files\Events\BeforeDirectFileDownloadEvent;
 use OCP\Files\File;
-use OCP\Files\IRootFolder;
+use OCP\Files\IUserFolder;
 use OCP\IRequest;
 use OCP\IURLGenerator;
+use OCP\Log\Audit\CriticalActionPerformedEvent;
 use OCP\Security\ISecureRandom;
+use OCP\Share\IManager;
 
 class DirectController extends OCSController {
 
-	/** @var IRootFolder */
-	private $rootFolder;
-
-	/** @var string */
-	private $userId;
-
-	/** @var DirectMapper */
-	private $mapper;
-
-	/** @var ISecureRandom */
-	private $random;
-
-	/** @var ITimeFactory */
-	private $timeFactory;
-
-	/** @var IURLGenerator */
-	private $urlGenerator;
-
-	/** @var IEventDispatcher */
-	private $eventDispatcher;
-
-	public function __construct(string $appName,
+	public function __construct(
+		string $appName,
 		IRequest $request,
-		IRootFolder $rootFolder,
-		string $userId,
-		DirectMapper $mapper,
-		ISecureRandom $random,
-		ITimeFactory $timeFactory,
-		IURLGenerator $urlGenerator,
-		IEventDispatcher $eventDispatcher) {
+		private IUserFolder $userFolder,
+		private string $userId,
+		private DirectMapper $mapper,
+		private ISecureRandom $random,
+		private ITimeFactory $timeFactory,
+		private IURLGenerator $urlGenerator,
+		private IEventDispatcher $eventDispatcher,
+		private IManager $shareManager,
+	) {
 		parent::__construct($appName, $request);
-
-		$this->rootFolder = $rootFolder;
-		$this->userId = $userId;
-		$this->mapper = $mapper;
-		$this->random = $random;
-		$this->timeFactory = $timeFactory;
-		$this->urlGenerator = $urlGenerator;
-		$this->eventDispatcher = $eventDispatcher;
 	}
 
 	/**
-	 * @NoAdminRequired
-	 *
 	 * Get a direct link to a file
 	 *
 	 * @param int $fileId ID of the file
@@ -101,10 +59,15 @@ class DirectController extends OCSController {
 	 *
 	 * 200: Direct link returned
 	 */
+	#[NoAdminRequired]
+	// Not OCA\Files_Sharing\TokenScopes::SHARES_WRITE: files_sharing can be disabled, and its classes don't load then
+	#[TokenScope(scope: 'files_sharing:shares:write')]
 	public function getUrl(int $fileId, int $expirationTime = 60 * 60 * 8): DataResponse {
-		$userFolder = $this->rootFolder->getUserFolder($this->userId);
+		if (!$this->shareManager->shareApiAllowLinks()) {
+			throw new OCSForbiddenException('Creating direct links is disabled');
+		}
 
-		$file = $userFolder->getFirstNodeById($fileId);
+		$file = $this->userFolder->getFirstNodeById($fileId);
 
 		if (!$file) {
 			throw new OCSNotFoundException();
@@ -118,7 +81,7 @@ class DirectController extends OCSController {
 			throw new OCSBadRequestException('Direct download only works for files');
 		}
 
-		$event = new BeforeDirectFileDownloadEvent($userFolder->getRelativePath($file->getPath()));
+		$event = new BeforeDirectFileDownloadEvent($this->userFolder->getRelativePath($file->getPath()));
 		$this->eventDispatcher->dispatchTyped($event);
 
 		if ($event->isSuccessful() === false) {
@@ -136,7 +99,17 @@ class DirectController extends OCSController {
 
 		$this->mapper->insert($direct);
 
-		$url = $this->urlGenerator->getAbsoluteURL('remote.php/direct/'.$token);
+		$this->eventDispatcher->dispatchTyped(new CriticalActionPerformedEvent(
+			'Direct download link for file "%s" was created, valid for %s seconds',
+			[
+				'fileId' => $fileId,
+				'expirationTime' => $expirationTime,
+			],
+			false,
+			'dav.direct_link.created',
+		));
+
+		$url = $this->urlGenerator->getAbsoluteURL('remote.php/direct/' . $token);
 
 		return new DataResponse([
 			'url' => $url,

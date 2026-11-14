@@ -1,29 +1,11 @@
 <?php
+
 /**
- * @copyright Copyright (c) 2016, ownCloud, Inc.
- *
- * @author Christoph Wurst <christoph@winzerhof-wurst.at>
- * @author Joas Schilling <coding@schilljs.com>
- * @author Johannes Ernst <jernst@indiecomputing.com>
- * @author Robin McCorkell <robin@mccorkell.me.uk>
- * @author Roeland Jago Douma <roeland@famdouma.nl>
- * @author Tim Terhorst <mynamewastaken+gitlab@gmail.com>
- *
- * @license AGPL-3.0
- *
- * This code is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License, version 3,
- * as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program. If not, see <http://www.gnu.org/licenses/>
- *
+ * SPDX-FileCopyrightText: 2016-2024 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-FileCopyrightText: 2016 ownCloud, Inc.
+ * SPDX-License-Identifier: AGPL-3.0-only
  */
+
 namespace OC\Core\Command\Log;
 
 use OCP\IConfig;
@@ -45,6 +27,7 @@ class Manage extends Command implements CompletionAwareInterface {
 		parent::__construct();
 	}
 
+	#[\Override]
 	protected function configure() {
 		$this
 			->setName('log:manage')
@@ -70,6 +53,7 @@ class Manage extends Command implements CompletionAwareInterface {
 		;
 	}
 
+	#[\Override]
 	protected function execute(InputInterface $input, OutputInterface $output): int {
 		// collate config setting to the end, to avoid partial configuration
 		$toBeSet = [];
@@ -103,14 +87,14 @@ class Manage extends Command implements CompletionAwareInterface {
 
 		// display configuration
 		$backend = $this->config->getSystemValue('log_type', self::DEFAULT_BACKEND);
-		$output->writeln('Enabled logging backend: '.$backend);
+		$output->writeln('Enabled logging backend: ' . $backend);
 
 		$levelNum = $this->config->getSystemValue('loglevel', self::DEFAULT_LOG_LEVEL);
 		$level = $this->convertLevelNumber($levelNum);
-		$output->writeln('Log level: '.$level.' ('.$levelNum.')');
+		$output->writeln('Log level: ' . $level . ' (' . $levelNum . ')');
 
 		$timezone = $this->config->getSystemValue('logtimezone', self::DEFAULT_TIMEZONE);
-		$output->writeln('Log timezone: '.$timezone);
+		$output->writeln('Log timezone: ' . $timezone);
 		return 0;
 	}
 
@@ -119,7 +103,7 @@ class Manage extends Command implements CompletionAwareInterface {
 	 * @throws \InvalidArgumentException
 	 */
 	protected function validateBackend($backend) {
-		if (!class_exists('OC\\Log\\'.ucfirst($backend))) {
+		if (!class_exists('OC\\Log\\' . ucfirst($backend))) {
 			throw new \InvalidArgumentException('Invalid backend');
 		}
 	}
@@ -182,6 +166,7 @@ class Manage extends Command implements CompletionAwareInterface {
 	 * @param CompletionContext $context
 	 * @return string[]
 	 */
+	#[\Override]
 	public function completeOptionValues($optionName, CompletionContext $context) {
 		if ($optionName === 'backend') {
 			return ['file', 'syslog', 'errorlog', 'systemd'];
@@ -198,6 +183,7 @@ class Manage extends Command implements CompletionAwareInterface {
 	 * @param CompletionContext $context
 	 * @return string[]
 	 */
+	#[\Override]
 	public function completeArgumentValues($argumentName, CompletionContext $context) {
 		return [];
 	}

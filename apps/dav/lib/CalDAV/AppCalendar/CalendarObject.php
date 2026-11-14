@@ -3,25 +3,8 @@
 declare(strict_types=1);
 
 /**
- * @copyright 2023 Ferdinand Thiessen <opensource@fthiessen.de>
- *
- * @author Ferdinand Thiessen <opensource@fthiessen.de>
- *
- * @license AGPL-3.0-or-later
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
- *
+ * SPDX-FileCopyrightText: 2023 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
 namespace OCA\DAV\CalDAV\AppCalendar;
@@ -37,24 +20,24 @@ use Sabre\VObject\Component\VCalendar;
 use Sabre\VObject\Property\ICalendar\DateTime;
 
 class CalendarObject implements ICalendarObject, IACL {
-	private VCalendar $vobject;
-	private AppCalendar $calendar;
-	private ICalendar|ICreateFromString $backend;
-
-	public function __construct(AppCalendar $calendar, ICalendar $backend, VCalendar $vobject) {
-		$this->backend = $backend;
-		$this->calendar = $calendar;
-		$this->vobject = $vobject;
+	public function __construct(
+		private AppCalendar $calendar,
+		private ICalendar|ICreateFromString $backend,
+		private VCalendar $vobject,
+	) {
 	}
 
+	#[\Override]
 	public function getOwner() {
 		return $this->calendar->getOwner();
 	}
 
+	#[\Override]
 	public function getGroup() {
 		return $this->calendar->getGroup();
 	}
 
+	#[\Override]
 	public function getACL(): array {
 		$acl = [
 			[
@@ -73,14 +56,17 @@ class CalendarObject implements ICalendarObject, IACL {
 		return $acl;
 	}
 
+	#[\Override]
 	public function setACL(array $acl): void {
 		throw new Forbidden('Setting ACL is not supported on this node');
 	}
 
+	#[\Override]
 	public function getSupportedPrivilegeSet(): ?array {
 		return null;
 	}
 
+	#[\Override]
 	public function put($data): void {
 		if ($this->backend instanceof ICreateFromString && $this->calendar->getPermissions() & Constants::PERMISSION_UPDATE) {
 			if (is_resource($data)) {
@@ -92,22 +78,27 @@ class CalendarObject implements ICalendarObject, IACL {
 		}
 	}
 
+	#[\Override]
 	public function get(): string {
 		return $this->vobject->serialize();
 	}
 
+	#[\Override]
 	public function getContentType(): string {
 		return 'text/calendar; charset=utf-8';
 	}
 
+	#[\Override]
 	public function getETag(): ?string {
 		return null;
 	}
 
+	#[\Override]
 	public function getSize() {
 		return mb_strlen($this->vobject->serialize());
 	}
 
+	#[\Override]
 	public function delete(): void {
 		if ($this->backend instanceof ICreateFromString && $this->calendar->getPermissions() & Constants::PERMISSION_DELETE) {
 			/** @var \Sabre\VObject\Component[] */
@@ -125,6 +116,7 @@ class CalendarObject implements ICalendarObject, IACL {
 		}
 	}
 
+	#[\Override]
 	public function getName(): string {
 		// Every object is required to have an UID
 		$base = $this->vobject->getBaseComponent();
@@ -138,10 +130,12 @@ class CalendarObject implements ICalendarObject, IACL {
 		return (string)$base->UID . '.ics';
 	}
 
+	#[\Override]
 	public function setName($name): void {
 		throw new Forbidden('This calendar-object is read-only');
 	}
 
+	#[\Override]
 	public function getLastModified(): ?int {
 		$base = $this->vobject->getBaseComponent();
 		if ($base !== null && $this->vobject->getBaseComponent()->{'LAST-MODIFIED'}) {

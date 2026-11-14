@@ -1,32 +1,12 @@
 <?php
+
 /**
- * @copyright Copyright (c) 2016, ownCloud, Inc.
- *
- * @author Bernhard Reiter <ockham@raz.or.at>
- * @author Christoph Wurst <christoph@winzerhof-wurst.at>
- * @author Daniel Kesselberg <mail@danielkesselberg.de>
- * @author Morris Jobke <hey@morrisjobke.de>
- * @author Roeland Jago Douma <roeland@famdouma.nl>
- * @author Thomas Tanghus <thomas@tanghus.net>
- * @author Vincent Petry <vincent@nextcloud.com>
- *
- * @license AGPL-3.0
- *
- * This code is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License, version 3,
- * as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program. If not, see <http://www.gnu.org/licenses/>
- *
+ * SPDX-FileCopyrightText: 2016-2024 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-FileCopyrightText: 2016 ownCloud, Inc.
+ * SPDX-License-Identifier: AGPL-3.0-only
  */
 // use OCP namespace for all classes that are considered public.
-// This means that they should be used by apps instead of the internal ownCloud classes
+// This means that they should be used by apps instead of the internal Nextcloud classes
 
 namespace OCP;
 
@@ -48,7 +28,7 @@ interface ITags {
 	/**
 	 * @since 19.0.0
 	 */
-	public const TAG_FAVORITE = '_$!<Favorite>!$_';
+	public const string TAG_FAVORITE = '_$!<Favorite>!$_';
 
 	/**
 	 * Check if any tags are saved for this type and user.
@@ -61,7 +41,7 @@ interface ITags {
 	 * ['id' => 0, 'name' = 'Tag', 'owner' = 'User', 'type' => 'tagtype']
 	 *
 	 * @param string $id The ID of the tag that is going to be mapped
-	 * @return array|false
+	 * @return array{id: ?int, name: string, owner: string, type: string}|false
 	 * @since 8.0.0
 	 */
 	public function getTag(string $id);
@@ -73,12 +53,12 @@ interface ITags {
 	 *
 	 * ```php
 	 * [
-	 * 	['id' => 0, 'name' = 'First tag'],
-	 * 	['id' => 1, 'name' = 'Second tag'],
+	 * 	['id' => 0, 'name' = 'First tag', 'owner' => 'User A', 'type' => 'tagtype'],
+	 * 	['id' => 1, 'name' = 'Second tag', 'owner' => 'User B', 'type' => 'tagtype'],
 	 * ]
 	 * ```
 	 *
-	 * @return array<array-key, array{id: int, name: string}>
+	 * @return list<array{id: ?int, name: string, owner: string, type: string}>
 	 * @since 6.0.0
 	 */
 	public function getTags(): array;
@@ -96,12 +76,12 @@ interface ITags {
 	 * ]
 	 * ```
 	 *
-	 * @param array $objIds item ids
-	 * @return array|false with object id as key and an array
-	 * of tag names as value or false if an error occurred
+	 * @param list<int> $objIds item ids
+	 * @return array<int, list<string>>|false with object id as key and an array
+	 *                                        of tag names as value or false if an error occurred
 	 * @since 8.0.0
 	 */
-	public function getTagsForObjects(array $objIds);
+	public function getTagsForObjects(array $objIds): array|false;
 
 	/**
 	 * Get a list of items tagged with $tag.
@@ -112,7 +92,7 @@ interface ITags {
 	 * @return array|false An array of object ids or false on error.
 	 * @since 6.0.0
 	 */
-	public function getIdsForTag($tag);
+	public function getIdsForTag(string|int $tag): array|false;
 
 	/**
 	 * Checks whether a tag is already saved.
@@ -124,7 +104,7 @@ interface ITags {
 
 	/**
 	 * Checks whether a tag is saved for the given user,
-	 * disregarding the ones shared with him or her.
+	 * disregarding the ones shared with them.
 	 *
 	 * @param string $name The tag name to check for.
 	 * @param string $user The user whose tags are to be checked.
@@ -150,19 +130,19 @@ interface ITags {
 	 * @return bool
 	 * @since 6.0.0
 	 */
-	public function rename($from, string $to): bool;
+	public function rename(string|int $from, string $to): bool;
 
 	/**
 	 * Add a list of new tags.
 	 *
-	 * @param string|string[] $names A string with a name or an array of strings containing
-	 * the name(s) of the to add.
+	 * @param string|list<string> $names A string with a name or an array of strings containing
+	 *                                   the name(s) of the tags to add.
 	 * @param bool $sync When true, save the tags
 	 * @param int|null $id int Optional object id to add to this|these tag(s)
 	 * @return bool Returns false on error.
 	 * @since 6.0.0
 	 */
-	public function addMultiple($names, bool $sync = false, ?int $id = null): bool;
+	public function addMultiple(string|array $names, bool $sync = false, ?int $id = null): bool;
 
 	/**
 	 * Delete tag/object relations from the db
@@ -204,27 +184,33 @@ interface ITags {
 	 *
 	 * @param int $objid The id of the object
 	 * @param string $tag The id or name of the tag
+	 * @param string $path The optional path of the node. Used when dispatching the favorite change event.
 	 * @return boolean Returns false on database error.
 	 * @since 6.0.0
+	 * @since 31.0.0 Added the $path argument.
+	 * @since 33.0.0 Change $path default value from '' to null.
 	 */
-	public function tagAs($objid, $tag);
+	public function tagAs($objid, $tag, ?string $path = null);
 
 	/**
 	 * Delete single tag/object relation from the db
 	 *
 	 * @param int $objid The id of the object
 	 * @param string $tag The id or name of the tag
+	 * @param string $path The optional path of the node. Used when dispatching the favorite change event.
 	 * @return boolean
 	 * @since 6.0.0
+	 * @since 31.0.0 Added the $path argument.
+	 * @since 33.0.0 Change $path default value from '' to null.
 	 */
-	public function unTag($objid, $tag);
+	public function unTag($objid, $tag, ?string $path = null);
 
 	/**
 	 * Delete tags from the database
 	 *
-	 * @param string[]|integer[] $names An array of tags (names or IDs) to delete
+	 * @param string[]|integer[]|string|int $names An array of tags (names or IDs) to delete
 	 * @return bool Returns false on error
 	 * @since 6.0.0
 	 */
-	public function delete($names);
+	public function delete(array|string|int $names): bool;
 }

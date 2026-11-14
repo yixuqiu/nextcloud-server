@@ -1,27 +1,9 @@
 <?php
 
 declare(strict_types=1);
-
 /**
- * @copyright Copyright (c) 2021 Arthur Schiwon <blizzz@arthur-schiwon.de>
- *
- * @author Arthur Schiwon <blizzz@arthur-schiwon.de>
- *
- * @license GNU AGPL version 3 or any later version
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program.  If not, see <https://www.gnu.org/licenses/>.
- *
+ * SPDX-FileCopyrightText: 2021 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
 namespace OC\Accounts;
@@ -40,6 +22,7 @@ class AccountPropertyCollection implements IAccountPropertyCollection {
 	) {
 	}
 
+	#[\Override]
 	public function setProperties(array $properties): IAccountPropertyCollection {
 		/** @var IAccountProperty $property */
 		$this->properties = [];
@@ -49,10 +32,12 @@ class AccountPropertyCollection implements IAccountPropertyCollection {
 		return $this;
 	}
 
+	#[\Override]
 	public function getProperties(): array {
 		return $this->properties;
 	}
 
+	#[\Override]
 	public function addProperty(IAccountProperty $property): IAccountPropertyCollection {
 		if ($property->getName() !== $this->collectionName) {
 			throw new InvalidArgumentException('Provided property does not match collection name');
@@ -61,6 +46,7 @@ class AccountPropertyCollection implements IAccountPropertyCollection {
 		return $this;
 	}
 
+	#[\Override]
 	public function addPropertyWithDefaults(string $value): IAccountPropertyCollection {
 		$property = new AccountProperty(
 			$this->collectionName,
@@ -73,6 +59,7 @@ class AccountPropertyCollection implements IAccountPropertyCollection {
 		return $this;
 	}
 
+	#[\Override]
 	public function removeProperty(IAccountProperty $property): IAccountPropertyCollection {
 		$ref = array_search($property, $this->properties, true);
 		if ($ref !== false) {
@@ -81,6 +68,7 @@ class AccountPropertyCollection implements IAccountPropertyCollection {
 		return $this;
 	}
 
+	#[\Override]
 	public function getPropertyByValue(string $value): ?IAccountProperty {
 		foreach ($this->properties as $i => $property) {
 			if ($property->getValue() === $value) {
@@ -90,6 +78,7 @@ class AccountPropertyCollection implements IAccountPropertyCollection {
 		return null;
 	}
 
+	#[\Override]
 	public function removePropertyByValue(string $value): IAccountPropertyCollection {
 		foreach ($this->properties as $i => $property) {
 			if ($property->getValue() === $value) {
@@ -99,10 +88,12 @@ class AccountPropertyCollection implements IAccountPropertyCollection {
 		return $this;
 	}
 
+	#[\Override]
 	public function jsonSerialize(): array {
 		return [$this->collectionName => $this->properties];
 	}
 
+	#[\Override]
 	public function getName(): string {
 		return $this->collectionName;
 	}

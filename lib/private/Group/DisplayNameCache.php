@@ -1,27 +1,10 @@
 <?php
 
 declare(strict_types=1);
-
 /**
- * @copyright 2022 Anna Larch <anna.larch@gmx.net>
- * @author Anna Larch <anna.larch@gmx.net>
- *
- * @license AGPL-3.0-or-later
- *
- * This code is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License, version 3,
- * as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program. If not, see <http://www.gnu.org/licenses/>
- *
+ * SPDX-FileCopyrightText: 2022 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
-
 
 namespace OC\Group;
 
@@ -43,12 +26,13 @@ use OCP\IGroupManager;
 class DisplayNameCache implements IEventListener {
 	private CappedMemoryCache $cache;
 	private ICache $memCache;
-	private IGroupManager $groupManager;
 
-	public function __construct(ICacheFactory $cacheFactory, IGroupManager $groupManager) {
+	public function __construct(
+		ICacheFactory $cacheFactory,
+		private IGroupManager $groupManager,
+	) {
 		$this->cache = new CappedMemoryCache();
 		$this->memCache = $cacheFactory->createDistributed('groupDisplayNameMappingCache');
-		$this->groupManager = $groupManager;
 	}
 
 	public function getDisplayName(string $groupId): ?string {
@@ -73,11 +57,51 @@ class DisplayNameCache implements IEventListener {
 		return $displayName;
 	}
 
+	/**
+	 * @param list<string> $groupIds
+	 * @return array<string, ?string>
+	 */
+	public function getDisplayNames(array $groupIds): array {
+		$result = [];
+		$missing = [];
+		foreach ($groupIds as $groupId) {
+			if (isset($this->cache[$groupId])) {
+				$result[$groupId] = $this->cache[$groupId];
+			} else {
+				$displayName = $this->memCache->get($groupId);
+				if ($displayName) {
+					$this->cache[$groupId] = $displayName;
+					$result[$groupId] = $displayName;
+				} else {
+					$missing[] = $groupId;
+				}
+			}
+		}
+
+		/** @var Manager $groupManager */
+		$groupManager = $this->groupManager;
+		$groups = $groupManager->getGroupsObjects($missing);
+		$stillMissingGroups = array_diff($missing, array_keys($groups));
+		foreach ($groups as $groupId => $group) {
+			$displayName = $group->getDisplayName();
+			$this->cache[$groupId] = $displayName;
+			$this->memCache->set($groupId, $displayName, 60 * 10); // 10 minutes
+			$result[$groupId] = $displayName;
+		}
+
+		foreach ($stillMissingGroups as $groupId) {
+			$result[$groupId] = null;
+		}
+
+		return $result;
+	}
+
 	public function clear(): void {
 		$this->cache = new CappedMemoryCache();
 		$this->memCache->clear();
 	}
 
+	#[\Override]
 	public function handle(Event $event): void {
 		if ($event instanceof GroupChangedEvent && $event->getFeature() === 'displayName') {
 			$groupId = $event->getGroup()->getGID();

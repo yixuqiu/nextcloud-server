@@ -1,31 +1,18 @@
 <?php
+
 /**
- * @copyright Copyright (c) 2016, ownCloud, Inc.
- *
- * @author Robin Appelman <robin@icewind.nl>
- * @author Roeland Jago Douma <roeland@famdouma.nl>
- *
- * @license AGPL-3.0
- *
- * This code is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License, version 3,
- * as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program. If not, see <http://www.gnu.org/licenses/>
- *
+ * SPDX-FileCopyrightText: 2016-2024 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-FileCopyrightText: 2016 ownCloud, Inc.
+ * SPDX-License-Identifier: AGPL-3.0-only
  */
+
 namespace OC\Files\Node;
 
+use OC\Hooks\Emitter;
 use OCP\Files\Cache\ICacheEntry;
 use OCP\Files\IRootFolder;
+use OCP\Files\IUserFolder;
 use OCP\Files\Mount\IMountPoint;
-use OCP\Files\Node;
 use OCP\Files\Node as INode;
 
 /**
@@ -36,11 +23,12 @@ use OCP\Files\Node as INode;
  *
  * @package OC\Files\Node
  */
-class LazyRoot extends LazyFolder implements IRootFolder {
+class LazyRoot extends LazyFolder implements IRootFolder, Emitter {
 	public function __construct(\Closure $folderClosure, array $data = []) {
 		parent::__construct($this, $folderClosure, $data);
 	}
 
+	#[\Override]
 	protected function getRootFolder(): IRootFolder {
 		$folder = $this->getRealFolder();
 		if (!$folder instanceof IRootFolder) {
@@ -49,19 +37,42 @@ class LazyRoot extends LazyFolder implements IRootFolder {
 		return $folder;
 	}
 
-	public function getUserFolder($userId) {
+	#[\Override]
+	public function getUserFolder(string $userId): IUserFolder {
 		return $this->__call(__FUNCTION__, func_get_args());
 	}
 
+	#[\Override]
 	public function getByIdInPath(int $id, string $path) {
 		return $this->__call(__FUNCTION__, func_get_args());
 	}
 
-	public function getFirstNodeByIdInPath(int $id, string $path): ?Node {
+	#[\Override]
+	public function getFirstNodeByIdInPath(int $id, string $path): ?INode {
 		return $this->__call(__FUNCTION__, func_get_args());
 	}
 
+	#[\Override]
 	public function getNodeFromCacheEntryAndMount(ICacheEntry $cacheEntry, IMountPoint $mountPoint): INode {
 		return $this->getRootFolder()->getNodeFromCacheEntryAndMount($cacheEntry, $mountPoint);
+	}
+
+	#[\Override]
+	public function getAppDataDirectoryName(): string {
+		return $this->__call(__FUNCTION__, func_get_args());
+	}
+
+	public function emit($scope, $method, $arguments = []) {
+		$this->__call(__FUNCTION__, func_get_args());
+	}
+
+	#[\Override]
+	public function listen($scope, $method, callable $callback) {
+		$this->__call(__FUNCTION__, func_get_args());
+	}
+
+	#[\Override]
+	public function removeListener($scope = null, $method = null, ?callable $callback = null) {
+		$this->__call(__FUNCTION__, func_get_args());
 	}
 }

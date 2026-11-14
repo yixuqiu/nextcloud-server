@@ -3,26 +3,10 @@
 declare(strict_types=1);
 
 /**
- * @copyright 2022 Thomas Citharel <nextcloud@tcit.fr>
- *
- * @author Thomas Citharel <nextcloud@tcit.fr>
- *
- * @license GNU AGPL version 3 or any later version
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
- *
+ * SPDX-FileCopyrightText: 2022 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
+
 namespace OCA\DAV\Listener;
 
 use OCA\DAV\CalDAV\BirthdayService;
@@ -34,12 +18,12 @@ use OCP\EventDispatcher\IEventListener;
 
 /** @template-implements IEventListener<CardCreatedEvent|CardUpdatedEvent|CardDeletedEvent> */
 class BirthdayListener implements IEventListener {
-	private BirthdayService $birthdayService;
-
-	public function __construct(BirthdayService $birthdayService) {
-		$this->birthdayService = $birthdayService;
+	public function __construct(
+		private BirthdayService $birthdayService,
+	) {
 	}
 
+	#[\Override]
 	public function handle(Event $event): void {
 		if ($event instanceof CardCreatedEvent || $event instanceof CardUpdatedEvent) {
 			$cardData = $event->getCardData();

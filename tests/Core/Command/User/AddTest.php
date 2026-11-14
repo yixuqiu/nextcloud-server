@@ -1,29 +1,13 @@
 <?php
+
 /**
- * @copyright Copyright (c) 2021, Philip Gatzka (philip.gatzka@mailbox.org)
- *
- * @author Philip Gatzka <philip.gatzka@mailbox.org>
- *
- * @license GNU AGPL version 3 or any later version
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
- *
+ * SPDX-FileCopyrightText: 2021 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
 declare(strict_types=1);
 
-namespace Core\Command\User;
+namespace Tests\Core\Command\User;
 
 use OC\Core\Command\User\Add;
 use OCA\Settings\Mailer\NewUserMailHelper;
@@ -38,8 +22,11 @@ use OCP\Security\ISecureRandom;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Output\OutputInterface;
 use Test\TestCase;
+use Test\Traits\EmailValidatorTrait;
 
 class AddTest extends TestCase {
+	use EmailValidatorTrait;
+
 	/** @var IUserManager|\PHPUnit\Framework\MockObject\MockObject */
 	private $userManager;
 
@@ -73,12 +60,12 @@ class AddTest extends TestCase {
 	/** @var Add */
 	private $addCommand;
 
+	#[\Override]
 	public function setUp(): void {
 		parent::setUp();
 
 		$this->userManager = static::createMock(IUserManager::class);
 		$this->groupManager = static::createStub(IGroupManager::class);
-		$this->mailer = static::createMock(IMailer::class);
 		$this->appConfig = static::createMock(IAppConfig::class);
 		$this->mailHelper = static::createMock(NewUserMailHelper::class);
 		$this->eventDispatcher = static::createStub(IEventDispatcher::class);
@@ -92,7 +79,7 @@ class AddTest extends TestCase {
 		$this->addCommand = new Add(
 			$this->userManager,
 			$this->groupManager,
-			$this->mailer,
+			$this->getEmailValidatorWithStrictEmailCheck(),
 			$this->appConfig,
 			$this->mailHelper,
 			$this->eventDispatcher,
@@ -100,9 +87,7 @@ class AddTest extends TestCase {
 		);
 	}
 
-	/**
-	 * @dataProvider addEmailDataProvider
-	 */
+	#[\PHPUnit\Framework\Attributes\DataProvider('addEmailDataProvider')]
 	public function testAddEmail(
 		?string $email,
 		bool $isEmailValid,
@@ -115,11 +100,8 @@ class AddTest extends TestCase {
 		$this->userManager->method('createUser')
 			->willReturn($this->user);
 
-		$this->appConfig->method('getValueString')
-			->willReturn($shouldSendEmail ? 'yes' : 'no');
-
-		$this->mailer->method('validateMailAddress')
-			->willReturn($isEmailValid);
+		$this->appConfig->method('getValueBool')
+			->willReturn($shouldSendEmail);
 
 		$this->mailHelper->method('generateTemplate')
 			->willReturn(static::createMock(IEMailTemplate::class));
@@ -127,12 +109,17 @@ class AddTest extends TestCase {
 		$this->mailHelper->expects($isEmailValid && $shouldSendEmail ? static::once() : static::never())
 			->method('sendMail');
 
+		$this->consoleInput->method('getArgument')
+			->willReturnMap([
+				['uid', 'JohnDoe'],
+			]);
+
 		$this->consoleInput->method('getOption')
-			->will(static::returnValueMap([
+			->willReturnMap([
 				['generate-password', 'true'],
 				['email', $email],
 				['group', []],
-			]));
+			]);
 
 		$this->invokePrivate($this->addCommand, 'execute', [
 			$this->consoleInput,
@@ -143,7 +130,7 @@ class AddTest extends TestCase {
 	/**
 	 * @return array
 	 */
-	public function addEmailDataProvider(): array {
+	public static function addEmailDataProvider(): array {
 		return [
 			'Valid E-Mail' => [
 				'info@example.com',

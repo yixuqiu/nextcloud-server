@@ -3,29 +3,10 @@
 declare(strict_types=1);
 
 /**
- * @copyright 2018, Roeland Jago Douma <roeland@famdouma.nl>
- *
- * @author Joas Schilling <coding@schilljs.com>
- * @author Roeland Jago Douma <roeland@famdouma.nl>
- * @author Tim Obert <tobert@w-commerce.de>
- * @author TimObert <tobert@w-commerce.de>
- *
- * @license GNU AGPL version 3 or any later version
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
- *
+ * SPDX-FileCopyrightText: 2018 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
+
 namespace OCP\AppFramework;
 
 use OCP\AppFramework\Http\Attribute\BruteForceProtection;
@@ -66,9 +47,6 @@ abstract class AuthPublicShareController extends PublicShareController {
 	}
 
 	/**
-	 * @PublicPage
-	 * @NoCSRFRequired
-	 *
 	 * Show the authentication page
 	 * The form has to submit to the authenticate method route
 	 *
@@ -145,10 +123,6 @@ abstract class AuthPublicShareController extends PublicShareController {
 	}
 
 	/**
-	 * @UseSession
-	 * @PublicPage
-	 * @BruteForceProtection(action=publicLinkAuth)
-	 *
 	 * Authenticate the share
 	 *
 	 * @since 14.0.0
@@ -163,7 +137,7 @@ abstract class AuthPublicShareController extends PublicShareController {
 		}
 
 		// Is user requesting a temporary password?
-		if ($passwordRequest == '') {
+		if ($passwordRequest === '') {
 			if ($this->validateIdentity($identityToken)) {
 				$this->generatePassword();
 				$response = $this->showIdentificationResult(true);
@@ -185,8 +159,7 @@ abstract class AuthPublicShareController extends PublicShareController {
 		$this->session->regenerateId(true, true);
 		$response = $this->getRedirect();
 
-		$this->session->set('public_link_authenticated_token', $this->getToken());
-		$this->session->set('public_link_authenticated_password_hash', $this->getPasswordHash());
+		$this->storeTokenSession($this->getToken(), $this->getPasswordHash());
 
 		$this->authSucceeded();
 
@@ -209,17 +182,16 @@ abstract class AuthPublicShareController extends PublicShareController {
 		);
 	}
 
-
 	/**
 	 * @since 14.0.0
 	 */
 	private function getRoute(string $function): string {
 		$app = strtolower($this->appName);
 		$class = (new \ReflectionClass($this))->getShortName();
-		if (substr($class, -10) === 'Controller') {
+		if (str_ends_with($class, 'Controller')) {
 			$class = substr($class, 0, -10);
 		}
-		return $app .'.'. $class .'.'. $function;
+		return $app . '.' . $class . '.' . $function;
 	}
 
 	/**

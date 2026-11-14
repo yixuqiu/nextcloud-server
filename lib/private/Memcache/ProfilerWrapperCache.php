@@ -2,25 +2,8 @@
 
 declare(strict_types = 1);
 /**
- * @copyright 2022 Carl Schwan <carl@carlschwan.eu>
- *
- * @author Carl Schwan <carl@carlschwan.eu>
- *
- * @license GNU AGPL version 3 or any later version
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
- *
+ * SPDX-FileCopyrightText: 2022 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
 namespace OC\Memcache;
@@ -35,19 +18,18 @@ use OCP\IMemcacheTTL;
  * @template-implements \ArrayAccess<string,mixed>
  */
 class ProfilerWrapperCache extends AbstractDataCollector implements IMemcacheTTL, \ArrayAccess {
-	/** @var Redis  $wrappedCache*/
+	/** @var Redis $wrappedCache */
 	protected $wrappedCache;
 
 	/** @var string $prefix */
 	protected $prefix;
 
-	/** @var string $type */
-	private $type;
-
-	public function __construct(Redis $wrappedCache, string $type) {
+	public function __construct(
+		Redis $wrappedCache,
+		private string $type,
+	) {
 		$this->prefix = $wrappedCache->getPrefix();
 		$this->wrappedCache = $wrappedCache;
-		$this->type = $type;
 		$this->data['queries'] = [];
 		$this->data['cacheHit'] = 0;
 		$this->data['cacheMiss'] = 0;
@@ -58,6 +40,7 @@ class ProfilerWrapperCache extends AbstractDataCollector implements IMemcacheTTL
 	}
 
 	/** @inheritDoc */
+	#[\Override]
 	public function get($key) {
 		$start = microtime(true);
 		$ret = $this->wrappedCache->get($key);
@@ -76,6 +59,7 @@ class ProfilerWrapperCache extends AbstractDataCollector implements IMemcacheTTL
 	}
 
 	/** @inheritDoc */
+	#[\Override]
 	public function set($key, $value, $ttl = 0) {
 		$start = microtime(true);
 		$ret = $this->wrappedCache->set($key, $value, $ttl);
@@ -88,6 +72,7 @@ class ProfilerWrapperCache extends AbstractDataCollector implements IMemcacheTTL
 	}
 
 	/** @inheritDoc */
+	#[\Override]
 	public function hasKey($key) {
 		$start = microtime(true);
 		$ret = $this->wrappedCache->hasKey($key);
@@ -100,6 +85,7 @@ class ProfilerWrapperCache extends AbstractDataCollector implements IMemcacheTTL
 	}
 
 	/** @inheritDoc */
+	#[\Override]
 	public function remove($key) {
 		$start = microtime(true);
 		$ret = $this->wrappedCache->remove($key);
@@ -112,6 +98,7 @@ class ProfilerWrapperCache extends AbstractDataCollector implements IMemcacheTTL
 	}
 
 	/** @inheritDoc */
+	#[\Override]
 	public function clear($prefix = '') {
 		$start = microtime(true);
 		$ret = $this->wrappedCache->clear($prefix);
@@ -124,6 +111,7 @@ class ProfilerWrapperCache extends AbstractDataCollector implements IMemcacheTTL
 	}
 
 	/** @inheritDoc */
+	#[\Override]
 	public function add($key, $value, $ttl = 0) {
 		$start = microtime(true);
 		$ret = $this->wrappedCache->add($key, $value, $ttl);
@@ -136,6 +124,7 @@ class ProfilerWrapperCache extends AbstractDataCollector implements IMemcacheTTL
 	}
 
 	/** @inheritDoc */
+	#[\Override]
 	public function inc($key, $step = 1) {
 		$start = microtime(true);
 		$ret = $this->wrappedCache->inc($key, $step);
@@ -148,6 +137,7 @@ class ProfilerWrapperCache extends AbstractDataCollector implements IMemcacheTTL
 	}
 
 	/** @inheritDoc */
+	#[\Override]
 	public function dec($key, $step = 1) {
 		$start = microtime(true);
 		$ret = $this->wrappedCache->dec($key, $step);
@@ -160,6 +150,7 @@ class ProfilerWrapperCache extends AbstractDataCollector implements IMemcacheTTL
 	}
 
 	/** @inheritDoc */
+	#[\Override]
 	public function cas($key, $old, $new) {
 		$start = microtime(true);
 		$ret = $this->wrappedCache->cas($key, $old, $new);
@@ -172,6 +163,7 @@ class ProfilerWrapperCache extends AbstractDataCollector implements IMemcacheTTL
 	}
 
 	/** @inheritDoc */
+	#[\Override]
 	public function cad($key, $old) {
 		$start = microtime(true);
 		$ret = $this->wrappedCache->cad($key, $old);
@@ -184,22 +176,40 @@ class ProfilerWrapperCache extends AbstractDataCollector implements IMemcacheTTL
 	}
 
 	/** @inheritDoc */
+	#[\Override]
+	public function ncad(string $key, mixed $old): bool {
+		$start = microtime(true);
+		$ret = $this->wrappedCache->ncad($key, $old);
+		$this->data['queries'][] = [
+			'start' => $start,
+			'end' => microtime(true),
+			'op' => $this->getPrefix() . '::ncad::' . $key,
+		];
+		return $ret;
+	}
+
+	/** @inheritDoc */
+	#[\Override]
 	public function setTTL(string $key, int $ttl) {
 		$this->wrappedCache->setTTL($key, $ttl);
 	}
 
+	#[\Override]
 	public function getTTL(string $key): int|false {
 		return $this->wrappedCache->getTTL($key);
 	}
 
+	#[\Override]
 	public function compareSetTTL(string $key, mixed $value, int $ttl): bool {
 		return $this->wrappedCache->compareSetTTL($key, $value, $ttl);
 	}
 
+	#[\Override]
 	public function offsetExists($offset): bool {
 		return $this->hasKey($offset);
 	}
 
+	#[\Override]
 	public function offsetSet($offset, $value): void {
 		$this->set($offset, $value);
 	}
@@ -207,23 +217,28 @@ class ProfilerWrapperCache extends AbstractDataCollector implements IMemcacheTTL
 	/**
 	 * @return mixed
 	 */
+	#[\Override]
 	#[\ReturnTypeWillChange]
 	public function offsetGet($offset) {
 		return $this->get($offset);
 	}
 
+	#[\Override]
 	public function offsetUnset($offset): void {
 		$this->remove($offset);
 	}
 
+	#[\Override]
 	public function collect(Request $request, Response $response, ?\Throwable $exception = null): void {
 		// Nothing to do here $data is already ready
 	}
 
+	#[\Override]
 	public function getName(): string {
 		return 'cache/' . $this->type . '/' . $this->prefix;
 	}
 
+	#[\Override]
 	public static function isAvailable(): bool {
 		return true;
 	}

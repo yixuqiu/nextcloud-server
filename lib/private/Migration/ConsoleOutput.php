@@ -1,24 +1,11 @@
 <?php
+
 /**
- * @copyright Copyright (c) 2017, ownCloud GmbH
- *
- * @author Morris Jobke <hey@morrisjobke.de>
- *
- * @license AGPL-3.0
- *
- * This code is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License, version 3,
- * as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program. If not, see <http://www.gnu.org/licenses/>
- *
+ * SPDX-FileCopyrightText: 2017-2024 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-FileCopyrightText: 2015 ownCloud GmbH
+ * SPDX-License-Identifier: AGPL-3.0-only
  */
+
 namespace OC\Migration;
 
 use OCP\Migration\IOutput;
@@ -41,6 +28,7 @@ class ConsoleOutput implements IOutput {
 	) {
 	}
 
+	#[\Override]
 	public function debug(string $message): void {
 		$this->output->writeln($message, OutputInterface::VERBOSITY_VERBOSE);
 	}
@@ -48,6 +36,7 @@ class ConsoleOutput implements IOutput {
 	/**
 	 * @param string $message
 	 */
+	#[\Override]
 	public function info($message): void {
 		$this->output->writeln("<info>$message</info>");
 	}
@@ -55,6 +44,7 @@ class ConsoleOutput implements IOutput {
 	/**
 	 * @param string $message
 	 */
+	#[\Override]
 	public function warning($message): void {
 		$this->output->writeln("<comment>$message</comment>");
 	}
@@ -62,6 +52,7 @@ class ConsoleOutput implements IOutput {
 	/**
 	 * @param int $max
 	 */
+	#[\Override]
 	public function startProgress($max = 0): void {
 		if (!is_null($this->progressBar)) {
 			$this->progressBar->finish();
@@ -74,6 +65,7 @@ class ConsoleOutput implements IOutput {
 	 * @param int $step
 	 * @param string $description
 	 */
+	#[\Override]
 	public function advance($step = 1, $description = ''): void {
 		if (is_null($this->progressBar)) {
 			$this->progressBar = new ProgressBar($this->output);
@@ -85,6 +77,7 @@ class ConsoleOutput implements IOutput {
 		}
 	}
 
+	#[\Override]
 	public function finishProgress(): void {
 		if (is_null($this->progressBar)) {
 			return;

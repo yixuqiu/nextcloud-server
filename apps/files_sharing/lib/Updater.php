@@ -1,34 +1,24 @@
 <?php
+
 /**
- * @copyright Copyright (c) 2016, ownCloud, Inc.
- *
- * @author Björn Schießle <bjoern@schiessle.org>
- * @author Christoph Wurst <christoph@winzerhof-wurst.at>
- * @author Joas Schilling <coding@schilljs.com>
- * @author Michael Gapczynski <GapczynskiM@gmail.com>
- * @author Morris Jobke <hey@morrisjobke.de>
- * @author Roeland Jago Douma <roeland@famdouma.nl>
- *
- * @license AGPL-3.0
- *
- * This code is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License, version 3,
- * as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program. If not, see <http://www.gnu.org/licenses/>
- *
+ * SPDX-FileCopyrightText: 2018-2024 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-FileCopyrightText: 2016 ownCloud, Inc.
+ * SPDX-License-Identifier: AGPL-3.0-only
  */
+
 namespace OCA\Files_Sharing;
 
+use OC\Files\Cache\FileAccess;
+use OC\Files\Filesystem;
 use OC\Files\Mount\MountPoint;
+use OC\Share20\Manager;
 use OCP\Constants;
 use OCP\Files\Folder;
+use OCP\Files\IRootFolder;
+use OCP\Files\Mount\IMountManager;
+use OCP\Files\NotFoundException;
+use OCP\IUserSession;
+use OCP\Server;
 use OCP\Share\IShare;
 
 class Updater {
@@ -52,26 +42,64 @@ class Updater {
 	 * @param string $path
 	 */
 	private static function moveShareInOrOutOfShare($path): void {
-		$userFolder = \OC::$server->getUserFolder();
+		$userInSession = Server::get(IUserSession::class)->getUser();
+		if (!$userInSession) {
+			return;
+		}
+		$userFolder = Server::get(IRootFolder::class)->getUserFolder($userInSession->getUID());
 
-		// If the user folder can't be constructed (e.g. link share) just return.
-		if ($userFolder === null) {
+		$user = $userFolder->getOwner();
+		if (!$user) {
+			throw new \Exception('user folder has no owner');
+		}
+
+		try {
+			$src = $userFolder->get($path);
+		} catch (NotFoundException) {
 			return;
 		}
 
-		$src = $userFolder->get($path);
+		// if the share itself is being moved, we don't need to do anything,
+		// since incoming shares can't be moved into other shares (and thus also not out of shares)
+		if ($src->getMountPoint() instanceof SharedMount && $src->getInternalPath() === '') {
+			return;
+		}
 
-		$shareManager = \OC::$server->getShareManager();
+		$shareManager = Server::get(\OCP\Share\IManager::class);
+
+		if ($shareManager instanceof Manager) {
+			$shareManager->restrictDownloadOfReshares($src);
+		}
+
+		// We intentionally include invalid shares, as they have been automatically invalidated due to the node no longer
+		// being accessible for the user. Only in this case where we adjust the share after it was moved we want to ignore
+		// this to be able to still adjust it.
 
 		// FIXME: should CIRCLES be included here ??
-		$shares = $shareManager->getSharesBy($userFolder->getOwner()->getUID(), IShare::TYPE_USER, $src, false, -1);
-		$shares = array_merge($shares, $shareManager->getSharesBy($userFolder->getOwner()->getUID(), IShare::TYPE_GROUP, $src, false, -1));
-		$shares = array_merge($shares, $shareManager->getSharesBy($userFolder->getOwner()->getUID(), IShare::TYPE_ROOM, $src, false, -1));
+		$shares = $shareManager->getSharesBy($user->getUID(), IShare::TYPE_USER, $src, false, -1, onlyValid: false);
+		$shares = array_merge($shares, $shareManager->getSharesBy($user->getUID(), IShare::TYPE_GROUP, $src, false, -1, onlyValid: false));
+		$shares = array_merge($shares, $shareManager->getSharesBy($user->getUID(), IShare::TYPE_ROOM, $src, false, -1, onlyValid: false));
 
 		if ($src instanceof Folder) {
-			$subShares = $shareManager->getSharesInFolder($userFolder->getOwner()->getUID(), $src, false, false);
+			$cacheAccess = Server::get(FileAccess::class);
+
+			$sourceStorageId = $src->getStorage()->getCache()->getNumericStorageId();
+			$sourceInternalPath = $src->getInternalPath();
+			$subShares = array_merge(
+				$shareManager->getSharesBy($user->getUID(), IShare::TYPE_USER, onlyValid: false),
+				$shareManager->getSharesBy($user->getUID(), IShare::TYPE_GROUP, onlyValid: false),
+				$shareManager->getSharesBy($user->getUID(), IShare::TYPE_ROOM, onlyValid: false),
+			);
+			$shareSourceIds = array_map(fn (IShare $share) => $share->getNodeId(), $subShares);
+			$shareSources = $cacheAccess->getByFileIdsInStorage($shareSourceIds, $sourceStorageId);
 			foreach ($subShares as $subShare) {
-				$shares = array_merge($shares, array_values($subShare));
+				$shareCacheEntry = $shareSources[$subShare->getNodeId()] ?? null;
+				if (
+					$shareCacheEntry
+					&& str_starts_with($shareCacheEntry->getPath(), $sourceInternalPath . '/')
+				) {
+					$shares[] = $subShare;
+				}
 			}
 		}
 
@@ -81,20 +109,20 @@ class Updater {
 		}
 
 		// Check if the destination is inside a share
-		$mountManager = \OC::$server->getMountManager();
+		$mountManager = Server::get(IMountManager::class);
 		$dstMount = $mountManager->find($src->getPath());
 
 		//Ownership is moved over
 		foreach ($shares as $share) {
 			if (
-				$share->getShareType() !== IShare::TYPE_USER &&
-				$share->getShareType() !== IShare::TYPE_GROUP &&
-				$share->getShareType() !== IShare::TYPE_ROOM
+				$share->getShareType() !== IShare::TYPE_USER
+				&& $share->getShareType() !== IShare::TYPE_GROUP
+				&& $share->getShareType() !== IShare::TYPE_ROOM
 			) {
 				continue;
 			}
 
-			if ($dstMount instanceof \OCA\Files_Sharing\SharedMount) {
+			if ($dstMount instanceof SharedMount) {
 				if (!($dstMount->getShare()->getPermissions() & Constants::PERMISSION_SHARE)) {
 					$shareManager->deleteShare($share);
 					continue;
@@ -108,7 +136,7 @@ class Updater {
 
 			$share->setShareOwner($newOwner);
 			$share->setPermissions($newPermissions);
-			$shareManager->updateShare($share);
+			$shareManager->updateShare($share, onlyValid: false);
 		}
 	}
 
@@ -119,11 +147,15 @@ class Updater {
 	 * @param string $newPath new path relative to data/user/files
 	 */
 	private static function renameChildren($oldPath, $newPath) {
-		$absNewPath = \OC\Files\Filesystem::normalizePath('/' . \OC_User::getUser() . '/files/' . $newPath);
-		$absOldPath = \OC\Files\Filesystem::normalizePath('/' . \OC_User::getUser() . '/files/' . $oldPath);
+		$userInSession = Server::get(IUserSession::class)->getUser()?->getUID();
+		if ($userInSession === null) {
+			return;
+		}
+		$absNewPath = Filesystem::normalizePath('/' . $userInSession . '/files/' . $newPath);
+		$absOldPath = Filesystem::normalizePath('/' . $userInSession . '/files/' . $oldPath);
 
-		$mountManager = \OC\Files\Filesystem::getMountManager();
-		$mountedShares = $mountManager->findIn('/' . \OC_User::getUser() . '/files/' . $oldPath);
+		$mountManager = Filesystem::getMountManager();
+		$mountedShares = $mountManager->findIn('/' . $userInSession . '/files/' . $oldPath);
 		foreach ($mountedShares as $mount) {
 			/** @var MountPoint $mount */
 			if ($mount->getStorage()->instanceOfStorage(ISharedStorage::class)) {

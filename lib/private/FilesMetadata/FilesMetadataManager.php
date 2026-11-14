@@ -2,25 +2,8 @@
 
 declare(strict_types=1);
 /**
- * @copyright 2023 Maxence Lange <maxence@artificial-owl.com>
- *
- * @author Maxence Lange <maxence@artificial-owl.com>
- *
- * @license GNU AGPL version 3 or any later version
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
- *
+ * SPDX-FileCopyrightText: 2023 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
 namespace OC\FilesMetadata;
@@ -33,11 +16,11 @@ use OC\FilesMetadata\Model\FilesMetadata;
 use OC\FilesMetadata\Service\IndexRequestService;
 use OC\FilesMetadata\Service\MetadataRequestService;
 use OCP\BackgroundJob\IJobList;
-use OCP\DB\Exception;
 use OCP\DB\Exception as DBException;
 use OCP\DB\QueryBuilder\IQueryBuilder;
 use OCP\EventDispatcher\IEventDispatcher;
-use OCP\Files\Cache\CacheEntryRemovedEvent;
+use OCP\Files\Cache\CacheEntriesRemovedEvent;
+use OCP\Files\Cache\ICacheEntry;
 use OCP\Files\Events\Node\NodeWrittenEvent;
 use OCP\Files\InvalidPathException;
 use OCP\Files\Node;
@@ -61,7 +44,7 @@ use Psr\Log\LoggerInterface;
 class FilesMetadataManager implements IFilesMetadataManager {
 	public const CONFIG_KEY = 'files_metadata';
 	public const MIGRATION_DONE = 'files_metadata_installed';
-	private const JSON_MAXSIZE = 100000;
+	private const int JSON_MAXSIZE = 100000;
 
 	private ?IFilesMetadata $all = null;
 
@@ -89,15 +72,18 @@ class FilesMetadataManager implements IFilesMetadataManager {
 	 * @see self::PROCESS_LIVE
 	 * @since 28.0.0
 	 */
+	#[\Override]
 	public function refreshMetadata(
 		Node $node,
 		int $process = self::PROCESS_LIVE,
-		string $namedEvent = ''
+		string $namedEvent = '',
 	): IFilesMetadata {
+		$storageId = $node->getStorage()->getCache()->getNumericStorageId();
 		try {
-			$metadata = $this->metadataRequestService->getMetadataFromFileId($node->getId());
+			/** @var FilesMetadata $metadata */
+			$metadata = $this->metadataRequestService->getMetadataFromFileId($node->getId(), $node->getMountPoint()->getNumericStorageId());
 		} catch (FilesMetadataNotFoundException) {
-			$metadata = new FilesMetadata($node->getId());
+			$metadata = new FilesMetadata($node->getId(), $node->getMountPoint()->getNumericStorageId());
 		}
 
 		// if $process is LIVE, we enforce LIVE
@@ -121,7 +107,7 @@ class FilesMetadataManager implements IFilesMetadataManager {
 				return $this->refreshMetadata($node, self::PROCESS_BACKGROUND);
 			}
 
-			$this->jobList->add(UpdateSingleMetadata::class, [$node->getOwner()->getUID(), $node->getId()]);
+			$this->jobList->add(UpdateSingleMetadata::class, [$node->getOwner()?->getUID(), $node->getId()]);
 		}
 
 		return $metadata;
@@ -130,22 +116,37 @@ class FilesMetadataManager implements IFilesMetadataManager {
 	/**
 	 * @param int $fileId file id
 	 * @param boolean $generate Generate if metadata does not exists
+	 * @param ?int $storageId
 	 *
 	 * @inheritDoc
 	 * @return IFilesMetadata
 	 * @throws FilesMetadataNotFoundException if not found
 	 * @since 28.0.0
 	 */
-	public function getMetadata(int $fileId, bool $generate = false): IFilesMetadata {
+	#[\Override]
+	public function getMetadata(int $fileId, bool $generate = false, ?int $storageId = null): IFilesMetadata {
+		if ($storageId === null) {
+			$storageId = $this->metadataRequestService->getStorageIdForFileId($fileId);
+		}
 		try {
-			return $this->metadataRequestService->getMetadataFromFileId($fileId);
+			return $this->metadataRequestService->getMetadataFromFileId($fileId, $storageId);
 		} catch (FilesMetadataNotFoundException $ex) {
 			if ($generate) {
-				return new FilesMetadata($fileId);
+				return new FilesMetadata($fileId, $storageId);
 			}
 
 			throw $ex;
 		}
+	}
+
+	#[\Override]
+	public function getMetadataForNode(Node|ICacheEntry $node, bool $generate = false): IFilesMetadata {
+		if ($node instanceof Node) {
+			$storageId = $node->getData()->getStorageId();
+		} else {
+			$storageId = $node->getStorageId();
+		}
+		return $this->getMetadata($node->getId(), $generate, $storageId);
 	}
 
 	/**
@@ -157,6 +158,7 @@ class FilesMetadataManager implements IFilesMetadataManager {
 	 * @psalm-return array<int, IFilesMetadata>
 	 * @since 28.0.0
 	 */
+	#[\Override]
 	public function getMetadataForFiles(array $fileIds): array {
 		return $this->metadataRequestService->getMetadataFromFileIds($fileIds);
 	}
@@ -168,12 +170,17 @@ class FilesMetadataManager implements IFilesMetadataManager {
 	 * @throws FilesMetadataException if metadata seems malformed
 	 * @since 28.0.0
 	 */
+	#[\Override]
 	public function saveMetadata(IFilesMetadata $filesMetadata): void {
 		if ($filesMetadata->getFileId() === 0 || !$filesMetadata->updated()) {
 			return;
 		}
 
 		$json = json_encode($filesMetadata->jsonSerialize());
+		if (!$json) {
+			$this->logger->error('Failed to json encode file metadata for ' . $filesMetadata->getFileId(), ['metadata' => $filesMetadata->jsonSerialize()]);
+			return;
+		}
 		if (strlen($json) > self::JSON_MAXSIZE) {
 			$this->logger->debug('huge metadata content detected: ' . $json);
 			throw new FilesMetadataException('json cannot exceed ' . self::JSON_MAXSIZE . ' characters long; fileId: ' . $filesMetadata->getFileId() . '; size: ' . strlen($json));
@@ -214,17 +221,33 @@ class FilesMetadataManager implements IFilesMetadataManager {
 	 * @inheritDoc
 	 * @since 28.0.0
 	 */
+	#[\Override]
 	public function deleteMetadata(int $fileId): void {
 		try {
 			$this->metadataRequestService->dropMetadata($fileId);
-		} catch (Exception $e) {
+		} catch (DBException $e) {
 			$this->logger->warning('issue while deleteMetadata', ['exception' => $e, 'fileId' => $fileId]);
 		}
 
 		try {
 			$this->indexRequestService->dropIndex($fileId);
-		} catch (Exception $e) {
+		} catch (DBException $e) {
 			$this->logger->warning('issue while deleteMetadata', ['exception' => $e, 'fileId' => $fileId]);
+		}
+	}
+
+	#[\Override]
+	public function deleteMetadataForFiles(int $storage, array $fileIds): void {
+		try {
+			$this->metadataRequestService->dropMetadataForFiles($storage, $fileIds);
+		} catch (DBException $e) {
+			$this->logger->warning('issue while deleteMetadata', ['exception' => $e, 'fileIds' => $fileIds]);
+		}
+
+		try {
+			$this->indexRequestService->dropIndexForFiles($storage, $fileIds);
+		} catch (DBException $e) {
+			$this->logger->warning('issue while deleteMetadata', ['exception' => $e, 'fileIds' => $fileIds]);
 		}
 	}
 
@@ -238,10 +261,11 @@ class FilesMetadataManager implements IFilesMetadataManager {
 	 * @see IMetadataQuery
 	 * @since 28.0.0
 	 */
+	#[\Override]
 	public function getMetadataQuery(
 		IQueryBuilder $qb,
 		string $fileTableAlias,
-		string $fileIdField
+		string $fileIdField,
 	): IMetadataQuery {
 		return new MetadataQuery($qb, $this, $fileTableAlias, $fileIdField);
 	}
@@ -251,6 +275,7 @@ class FilesMetadataManager implements IFilesMetadataManager {
 	 * @return IFilesMetadata
 	 * @since 28.0.0
 	 */
+	#[\Override]
 	public function getKnownMetadata(): IFilesMetadata {
 		if ($this->all !== null) {
 			return $this->all;
@@ -286,11 +311,12 @@ class FilesMetadataManager implements IFilesMetadataManager {
 	 * @see IMetadataValueWrapper::EDIT_REQ_WRITE_PERMISSION
 	 * @see IMetadataValueWrapper::EDIT_REQ_READ_PERMISSION
 	 */
+	#[\Override]
 	public function initMetadata(
 		string $key,
 		string $type,
 		bool $indexed = false,
-		int $editPermission = IMetadataValueWrapper::EDIT_FORBIDDEN
+		int $editPermission = IMetadataValueWrapper::EDIT_FORBIDDEN,
 	): void {
 		$current = $this->getKnownMetadata();
 		try {
@@ -315,6 +341,6 @@ class FilesMetadataManager implements IFilesMetadataManager {
 	 */
 	public static function loadListeners(IEventDispatcher $eventDispatcher): void {
 		$eventDispatcher->addServiceListener(NodeWrittenEvent::class, MetadataUpdate::class);
-		$eventDispatcher->addServiceListener(CacheEntryRemovedEvent::class, MetadataDelete::class);
+		$eventDispatcher->addServiceListener(CacheEntriesRemovedEvent::class, MetadataDelete::class);
 	}
 }

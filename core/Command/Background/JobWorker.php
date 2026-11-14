@@ -1,33 +1,19 @@
 <?php
 
 declare(strict_types=1);
+
 /**
- * @copyright Copyright (c) 2021, Joas Schilling <coding@schilljs.com>
- *
- * @author Joas Schilling <coding@schilljs.com>
- *
- * @license GNU AGPL version 3 or any later version
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
- *
+ * SPDX-FileCopyrightText: 2021 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
 namespace OC\Core\Command\Background;
 
+use OC\BackgroundJob\JobClassesRegistry;
+use OC\BackgroundJob\JobRuns;
 use OC\Core\Command\InterruptedException;
-use OC\Files\SetupManager;
 use OCP\BackgroundJob\IJobList;
+use OCP\Files\ISetupManager;
 use OCP\ITempManager;
 use Psr\Log\LoggerInterface;
 use Symfony\Component\Console\Input\InputArgument;
@@ -36,15 +22,18 @@ use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Output\OutputInterface;
 
 class JobWorker extends JobBase {
-
 	public function __construct(
 		protected IJobList $jobList,
 		protected LoggerInterface $logger,
 		private ITempManager $tempManager,
-		private SetupManager $setupManager,
+		private ISetupManager $setupManager,
+		private readonly JobRuns $jobRuns,
+		private readonly JobClassesRegistry $jobClassesRegistry,
 	) {
 		parent::__construct($jobList, $logger);
 	}
+
+	#[\Override]
 	protected function configure(): void {
 		parent::configure();
 
@@ -67,12 +56,28 @@ class JobWorker extends JobBase {
 				'i',
 				InputOption::VALUE_OPTIONAL,
 				'Interval in seconds in which the worker should repeat already processed jobs (set to 0 for no repeat)',
-				5
+				1
+			)
+			->addOption(
+				'stop_after',
+				't',
+				InputOption::VALUE_OPTIONAL,
+				'Duration after which the worker should stop and exit. The worker won\'t kill a potential running job, it will exit after this job has finished running (supported values are: "30" or "30s" for 30 seconds, "10m" for 10 minutes and "2h" for 2 hours)'
 			)
 		;
 	}
 
+	#[\Override]
 	protected function execute(InputInterface $input, OutputInterface $output): int {
+		$startTime = time();
+		$stopAfterOptionValue = $input->getOption('stop_after');
+		$stopAfterSeconds = $stopAfterOptionValue === null
+			? null
+			: $this->parseStopAfter($stopAfterOptionValue);
+		if ($stopAfterSeconds !== null) {
+			$output->writeln('<info>Background job worker will stop after ' . $stopAfterSeconds . ' seconds</info>');
+		}
+
 		$jobClasses = $input->getArgument('job-classes');
 		$jobClasses = empty($jobClasses) ? null : $jobClasses;
 
@@ -87,6 +92,11 @@ class JobWorker extends JobBase {
 		}
 
 		while (true) {
+			// Stop if we exceeded stop_after value
+			if ($stopAfterSeconds !== null && ($startTime + $stopAfterSeconds) < time()) {
+				$output->writeln('stop_after time has been exceeded, exiting...', OutputInterface::VERBOSITY_VERBOSE);
+				break;
+			}
 			// Handle canceling of the process
 			try {
 				$this->abortIfInterrupted();
@@ -111,19 +121,32 @@ class JobWorker extends JobBase {
 				}
 
 				$output->writeln('Waiting for new jobs to be queued', OutputInterface::VERBOSITY_VERBOSE);
+				if ((int)$input->getOption('interval') === 0) {
+					break;
+				}
 				// Re-check interval for new jobs
-				sleep(1);
+				sleep((int)$input->getOption('interval'));
 				continue;
 			}
 
-			$output->writeln('Running job ' . get_class($job) . ' with ID ' . $job->getId());
+			$jobClassName = get_class($job);
+			$output->writeln('Running job ' . $jobClassName . ' with ID ' . $job->getId());
 
 			if ($output->isVerbose()) {
 				$this->printJobInfo($job->getId(), $job, $output);
 			}
 
-			/** @psalm-suppress DeprecatedMethod Calling execute until it is removed, then will switch to start */
-			$job->execute($this->jobList);
+			memory_reset_peak_usage();
+			$jobClassId = $this->jobClassesRegistry->getId($jobClassName);
+			$jobRunId = $this->jobRuns->started($jobClassId);
+			$jobStartTime = microtime(true);
+			$job->start($this->jobList);
+			$timeSpent = microtime(true) - $jobStartTime;
+			$jobMemoryPeak = memory_get_peak_usage();
+			// TODO Job failure will never be catched here because exceptions are catched within $job->start method
+			// The error will only be visible in server logs.
+			// It should be a temporary state until a proper job runner is implemented.
+			$this->jobRuns->finished($jobRunId, (int)($timeSpent * 1000), (int)($jobMemoryPeak / 1024));
 
 			$output->writeln('Job ' . $job->getId() . ' has finished', OutputInterface::VERBOSITY_VERBOSE);
 
@@ -153,5 +176,21 @@ class JobWorker extends JobBase {
 			$counts[] = $row;
 		}
 		$this->writeTableInOutputFormat($input, $output, $counts);
+	}
+
+	private function parseStopAfter(string $value): ?int {
+		if (is_numeric($value)) {
+			return (int)$value;
+		}
+		if (preg_match("/^(\d+)s$/i", $value, $matches)) {
+			return (int)$matches[0];
+		}
+		if (preg_match("/^(\d+)m$/i", $value, $matches)) {
+			return 60 * ((int)$matches[0]);
+		}
+		if (preg_match("/^(\d+)h$/i", $value, $matches)) {
+			return 60 * 60 * ((int)$matches[0]);
+		}
+		return null;
 	}
 }

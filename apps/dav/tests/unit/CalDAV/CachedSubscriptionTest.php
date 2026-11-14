@@ -1,27 +1,10 @@
 <?php
+
 /**
- * @copyright Copyright (c) 2018 Georg Ehrke
- *
- * @author Christoph Wurst <christoph@winzerhof-wurst.at>
- * @author Georg Ehrke <oc.list@georgehrke.com>
- * @author Roeland Jago Douma <roeland@famdouma.nl>
- *
- * @license GNU AGPL version 3 or any later version
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
- *
+ * SPDX-FileCopyrightText: 2018 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
+
 namespace OCA\DAV\Tests\unit\CalDAV;
 
 use OCA\DAV\CalDAV\CachedSubscription;
@@ -146,7 +129,6 @@ class CachedSubscriptionTest extends \Test\TestCase {
 		$calendar->propPatch($propPatch);
 	}
 
-
 	public function testGetChild(): void {
 		$this->expectException(\Sabre\DAV\Exception\NotFound::class);
 		$this->expectExceptionMessage('Calendar object not found');
@@ -159,19 +141,21 @@ class CachedSubscriptionTest extends \Test\TestCase {
 			'uri' => 'cal',
 		];
 
+		$calls = [
+			[666, 'foo1', 1, [
+				'id' => 99,
+				'uri' => 'foo1'
+			]],
+			[666, 'foo2', 1, null],
+		];
 		$backend->expects($this->exactly(2))
 			->method('getCalendarObject')
-			->withConsecutive(
-				[666, 'foo1', 1],
-				[666, 'foo2', 1],
-			)
-			->willReturnOnConsecutiveCalls(
-				[
-					'id' => 99,
-					'uri' => 'foo1'
-				],
-				null
-			);
+			->willReturnCallback(function () use (&$calls) {
+				$expected = array_shift($calls);
+				$return = array_pop($expected);
+				$this->assertEquals($expected, func_get_args());
+				return $return;
+			});
 
 		$calendar = new CachedSubscription($backend, $calendarInfo);
 
@@ -243,7 +227,6 @@ class CachedSubscriptionTest extends \Test\TestCase {
 		$this->assertInstanceOf(CachedSubscriptionObject::class, $res[1]);
 	}
 
-
 	public function testCreateFile(): void {
 		$this->expectException(\Sabre\DAV\Exception\MethodNotAllowed::class);
 		$this->expectExceptionMessage('Creating objects in cached subscription is not allowed');
@@ -269,19 +252,21 @@ class CachedSubscriptionTest extends \Test\TestCase {
 			'uri' => 'cal',
 		];
 
+		$calls = [
+			[666, 'foo1', 1, [
+				'id' => 99,
+				'uri' => 'foo1'
+			]],
+			[666, 'foo2', 1, null],
+		];
 		$backend->expects($this->exactly(2))
 			->method('getCalendarObject')
-			->withConsecutive(
-				[666, 'foo1', 1],
-				[666, 'foo2', 1],
-			)
-			->willReturnOnConsecutiveCalls(
-				[
-					'id' => 99,
-					'uri' => 'foo1'
-				],
-				null
-			);
+			->willReturnCallback(function () use (&$calls) {
+				$expected = array_shift($calls);
+				$return = array_pop($expected);
+				$this->assertEquals($expected, func_get_args());
+				return $return;
+			});
 
 		$calendar = new CachedSubscription($backend, $calendarInfo);
 

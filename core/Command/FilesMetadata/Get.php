@@ -3,35 +3,18 @@
 declare(strict_types=1);
 
 /**
- * @copyright Copyright (c) 2023 Maxence Lange <maxence@artificial-owl.com>
- *
- * @author Maxence Lange <maxence@artificial-owl.com>
- *
- * @license GNU AGPL version 3 or any later version
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
- *
+ * SPDX-FileCopyrightText: 2023 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
 namespace OC\Core\Command\FilesMetadata;
 
-use OC\User\NoUserException;
 use OCP\Files\IRootFolder;
 use OCP\Files\NotFoundException;
 use OCP\Files\NotPermittedException;
 use OCP\FilesMetadata\Exceptions\FilesMetadataNotFoundException;
 use OCP\FilesMetadata\IFilesMetadataManager;
+use OCP\User\Exceptions\UserNotFoundException;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputArgument;
 use Symfony\Component\Console\Input\InputInterface;
@@ -46,45 +29,47 @@ class Get extends Command {
 		parent::__construct();
 	}
 
+	#[\Override]
 	protected function configure(): void {
 		$this->setName('metadata:get')
-			 ->setDescription('get stored metadata about a file, by its id')
-			 ->addArgument(
-			 	'fileId',
-			 	InputArgument::REQUIRED,
-			 	'id of the file document'
-			 )
-			 ->addArgument(
-			 	'userId',
-			 	InputArgument::OPTIONAL,
-			 	'file owner'
-			 )
-			 ->addOption(
-			 	'as-array',
-			 	'',
-			 	InputOption::VALUE_NONE,
-			 	'display metadata as a simple key=>value array'
-			 )
-			 ->addOption(
-			 	'refresh',
-			 	'',
-			 	InputOption::VALUE_NONE,
-			 	'refresh metadata'
-			 )
-			 ->addOption(
-			 	'reset',
-			 	'',
-			 	InputOption::VALUE_NONE,
-			 	'refresh metadata from scratch'
-			 );
+			->setDescription('get stored metadata about a file, by its id')
+			->addArgument(
+				'fileId',
+				InputArgument::REQUIRED,
+				'id of the file document'
+			)
+			->addArgument(
+				'userId',
+				InputArgument::OPTIONAL,
+				'file owner'
+			)
+			->addOption(
+				'as-array',
+				'',
+				InputOption::VALUE_NONE,
+				'display metadata as a simple key=>value array'
+			)
+			->addOption(
+				'refresh',
+				'',
+				InputOption::VALUE_NONE,
+				'refresh metadata'
+			)
+			->addOption(
+				'reset',
+				'',
+				InputOption::VALUE_NONE,
+				'refresh metadata from scratch'
+			);
 	}
 
 	/**
 	 * @throws NotPermittedException
 	 * @throws FilesMetadataNotFoundException
-	 * @throws NoUserException
+	 * @throws UserNotFoundException
 	 * @throws NotFoundException
 	 */
+	#[\Override]
 	protected function execute(InputInterface $input, OutputInterface $output): int {
 		$fileId = (int)$input->getArgument('fileId');
 
@@ -95,8 +80,8 @@ class Get extends Command {
 			}
 		}
 
+		$node = $this->rootFolder->getUserFolder($input->getArgument('userId'))->getFirstNodeById($fileId);
 		if ($input->getOption('refresh')) {
-			$node = $this->rootFolder->getUserFolder($input->getArgument('userId'))->getFirstNodeById($fileId);
 			if (!$node) {
 				throw new NotFoundException();
 			}
@@ -105,7 +90,7 @@ class Get extends Command {
 				IFilesMetadataManager::PROCESS_LIVE | IFilesMetadataManager::PROCESS_BACKGROUND
 			);
 		} else {
-			$metadata = $this->filesMetadataManager->getMetadata($fileId);
+			$metadata = $this->filesMetadataManager->getMetadataForNode($node);
 		}
 
 		if ($input->getOption('as-array')) {

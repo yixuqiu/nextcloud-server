@@ -1,28 +1,11 @@
 <?php
 
 declare(strict_types=1);
-
 /**
- * @copyright 2018
- *
- * @author Maxence Lange <maxence@artificial-owl.com>
- *
- * @license GNU AGPL version 3 or any later version
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
- *
+ * SPDX-FileCopyrightText: 2019 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
+
 namespace OC\FullTextSearch\Model;
 
 use JsonSerializable;
@@ -48,8 +31,6 @@ use OCP\FullTextSearch\Model\IIndexDocument;
  * @package OC\FullTextSearch\Model
  */
 class IndexDocument implements IIndexDocument, JsonSerializable {
-	protected string $id = '';
-
 	protected DocumentAccess $access;
 
 	protected ?IIndex $index = null;
@@ -84,7 +65,6 @@ class IndexDocument implements IIndexDocument, JsonSerializable {
 
 	protected int $contentEncoded = 0;
 
-
 	/**
 	 * IIndexDocument constructor.
 	 *
@@ -95,31 +75,29 @@ class IndexDocument implements IIndexDocument, JsonSerializable {
 	 */
 	public function __construct(
 		protected string $providerId,
-		string $documentId,
+		protected string $id,
 	) {
-		$this->id = $documentId;
 	}
-
 
 	/**
 	 * Returns the Id of the original document.
 	 *
 	 * @since 15.0.0
 	 */
+	#[\Override]
 	final public function getId(): string {
 		return $this->id;
 	}
-
 
 	/**
 	 * Returns the Id of the provider.
 	 *
 	 * @since 15.0.0
 	 */
+	#[\Override]
 	final public function getProviderId(): string {
 		return $this->providerId;
 	}
-
 
 	/**
 	 * Set the Index related to the IIndexDocument.
@@ -128,6 +106,7 @@ class IndexDocument implements IIndexDocument, JsonSerializable {
 	 *
 	 * @since 15.0.0
 	 */
+	#[\Override]
 	final public function setIndex(IIndex $index): IIndexDocument {
 		$this->index = $index;
 
@@ -140,6 +119,7 @@ class IndexDocument implements IIndexDocument, JsonSerializable {
 	 * @throws FullTextSearchIndexNotAvailableException
 	 * @since 15.0.0
 	 */
+	#[\Override]
 	final public function getIndex(): IIndex {
 		if ($this->index === null) {
 			throw new FullTextSearchIndexNotAvailableException('No IIndex generated');
@@ -153,6 +133,7 @@ class IndexDocument implements IIndexDocument, JsonSerializable {
 	 *
 	 * @since 16.0.0
 	 */
+	#[\Override]
 	final public function hasIndex(): bool {
 		return $this->index !== null;
 	}
@@ -162,6 +143,7 @@ class IndexDocument implements IIndexDocument, JsonSerializable {
 	 *
 	 * @since 15.0.0
 	 */
+	#[\Override]
 	final public function setModifiedTime(int $modifiedTime): IIndexDocument {
 		$this->modifiedTime = $modifiedTime;
 
@@ -173,6 +155,7 @@ class IndexDocument implements IIndexDocument, JsonSerializable {
 	 *
 	 * @since 15.0.0
 	 */
+	#[\Override]
 	final public function getModifiedTime(): int {
 		return $this->modifiedTime;
 	}
@@ -182,10 +165,10 @@ class IndexDocument implements IIndexDocument, JsonSerializable {
 	 *
 	 * @since 15.0.0
 	 */
+	#[\Override]
 	final public function isOlderThan(int $time): bool {
 		return ($this->modifiedTime < $time);
 	}
-
 
 	/**
 	 * Set the read rights of the original document using a IDocumentAccess.
@@ -194,6 +177,7 @@ class IndexDocument implements IIndexDocument, JsonSerializable {
 	 *
 	 * @since 15.0.0
 	 */
+	#[\Override]
 	final public function setAccess(IDocumentAccess $access): IIndexDocument {
 		$this->access = $access;
 
@@ -205,16 +189,17 @@ class IndexDocument implements IIndexDocument, JsonSerializable {
 	 *
 	 * @since 15.0.0
 	 */
+	#[\Override]
 	final public function getAccess(): IDocumentAccess {
 		return $this->access;
 	}
-
 
 	/**
 	 * Add a tag to the list.
 	 *
 	 * @since 15.0.0
 	 */
+	#[\Override]
 	final public function addTag(string $tag): IIndexDocument {
 		$this->tags[] = $tag;
 
@@ -226,6 +211,7 @@ class IndexDocument implements IIndexDocument, JsonSerializable {
 	 *
 	 * @since 15.0.0
 	 */
+	#[\Override]
 	final public function setTags(array $tags): IIndexDocument {
 		$this->tags = $tags;
 
@@ -237,16 +223,17 @@ class IndexDocument implements IIndexDocument, JsonSerializable {
 	 *
 	 * @since 15.0.0
 	 */
+	#[\Override]
 	final public function getTags(): array {
 		return $this->tags;
 	}
-
 
 	/**
 	 * Add a meta tag to the list.
 	 *
 	 * @since 15.0.0
 	 */
+	#[\Override]
 	final public function addMetaTag(string $tag): IIndexDocument {
 		$this->metaTags[] = $tag;
 
@@ -258,6 +245,7 @@ class IndexDocument implements IIndexDocument, JsonSerializable {
 	 *
 	 * @since 15.0.0
 	 */
+	#[\Override]
 	final public function setMetaTags(array $tags): IIndexDocument {
 		$this->metaTags = $tags;
 
@@ -269,16 +257,17 @@ class IndexDocument implements IIndexDocument, JsonSerializable {
 	 *
 	 * @since 15.0.0
 	 */
+	#[\Override]
 	final public function getMetaTags(): array {
 		return $this->metaTags;
 	}
-
 
 	/**
 	 * Add a sub tag to the list.
 	 *
 	 * @since 15.0.0
 	 */
+	#[\Override]
 	final public function addSubTag(string $sub, string $tag): IIndexDocument {
 		if (!array_key_exists($sub, $this->subTags)) {
 			$this->subTags[$sub] = [];
@@ -289,12 +278,12 @@ class IndexDocument implements IIndexDocument, JsonSerializable {
 		return $this;
 	}
 
-
 	/**
 	 * Set the list of sub tags assigned to the original document.
 	 *
 	 * @since 15.0.0
 	 */
+	#[\Override]
 	final public function setSubTags(array $tags): IIndexDocument {
 		$this->subTags = $tags;
 
@@ -308,6 +297,7 @@ class IndexDocument implements IIndexDocument, JsonSerializable {
 	 *
 	 * @since 15.0.0
 	 */
+	#[\Override]
 	final public function getSubTags(bool $formatted = false): array {
 		if ($formatted === false) {
 			return $this->subTags;
@@ -325,12 +315,12 @@ class IndexDocument implements IIndexDocument, JsonSerializable {
 		return $subTags;
 	}
 
-
 	/**
 	 * Set the source of the original document.
 	 *
 	 * @since 15.0.0
 	 */
+	#[\Override]
 	final public function setSource(string $source): IIndexDocument {
 		$this->source = $source;
 
@@ -342,16 +332,17 @@ class IndexDocument implements IIndexDocument, JsonSerializable {
 	 *
 	 * @since 15.0.0
 	 */
+	#[\Override]
 	final public function getSource(): string {
 		return $this->source;
 	}
-
 
 	/**
 	 * Set the title of the original document.
 	 *
 	 * @since 15.0.0
 	 */
+	#[\Override]
 	final public function setTitle(string $title): IIndexDocument {
 		$this->title = $title;
 
@@ -363,10 +354,10 @@ class IndexDocument implements IIndexDocument, JsonSerializable {
 	 *
 	 * @since 15.0.0
 	 */
+	#[\Override]
 	final public function getTitle(): string {
 		return $this->title;
 	}
-
 
 	/**
 	 * Set the content of the document.
@@ -375,6 +366,7 @@ class IndexDocument implements IIndexDocument, JsonSerializable {
 	 *
 	 * @since 15.0.0
 	 */
+	#[\Override]
 	final public function setContent(string $content, int $encoded = 0): IIndexDocument {
 		$this->content = $content;
 		$this->contentEncoded = $encoded;
@@ -387,6 +379,7 @@ class IndexDocument implements IIndexDocument, JsonSerializable {
 	 *
 	 * @since 15.0.0
 	 */
+	#[\Override]
 	final public function getContent(): string {
 		return $this->content;
 	}
@@ -396,6 +389,7 @@ class IndexDocument implements IIndexDocument, JsonSerializable {
 	 *
 	 * @since 15.0.0
 	 */
+	#[\Override]
 	final public function isContentEncoded(): int {
 		return $this->contentEncoded;
 	}
@@ -405,22 +399,23 @@ class IndexDocument implements IIndexDocument, JsonSerializable {
 	 *
 	 * @since 15.0.0
 	 */
+	#[\Override]
 	final public function getContentSize(): int {
 		return strlen($this->getContent());
 	}
-
 
 	/**
 	 * Generate a hash, based on the content of the original document.
 	 *
 	 * @since 15.0.0
 	 */
+	#[\Override]
 	final public function initHash(): IIndexDocument {
 		if ($this->getContent() === '' || is_null($this->getContent())) {
 			return $this;
 		}
 
-		$this->hash = hash("md5", $this->getContent());
+		$this->hash = hash('md5', $this->getContent());
 
 		return $this;
 	}
@@ -430,6 +425,7 @@ class IndexDocument implements IIndexDocument, JsonSerializable {
 	 *
 	 * @since 15.0.0
 	 */
+	#[\Override]
 	final public function setHash(string $hash): IIndexDocument {
 		$this->hash = $hash;
 
@@ -441,10 +437,10 @@ class IndexDocument implements IIndexDocument, JsonSerializable {
 	 *
 	 * @since 15.0.0
 	 */
+	#[\Override]
 	final public function getHash(): string {
 		return $this->hash;
 	}
-
 
 	/**
 	 * Add a part, identified by a string, and its content.
@@ -454,6 +450,7 @@ class IndexDocument implements IIndexDocument, JsonSerializable {
 	 *
 	 * @since 15.0.0
 	 */
+	#[\Override]
 	final public function addPart(string $part, string $content): IIndexDocument {
 		$this->parts[$part] = $content;
 
@@ -465,6 +462,7 @@ class IndexDocument implements IIndexDocument, JsonSerializable {
 	 *
 	 * @since 15.0.0
 	 */
+	#[\Override]
 	final public function setParts(array $parts): IIndexDocument {
 		$this->parts = $parts;
 
@@ -476,16 +474,17 @@ class IndexDocument implements IIndexDocument, JsonSerializable {
 	 *
 	 * @since 15.0.0
 	 */
+	#[\Override]
 	final public function getParts(): array {
 		return $this->parts;
 	}
-
 
 	/**
 	 * Add a link, usable by the frontend.
 	 *
 	 * @since 15.0.0
 	 */
+	#[\Override]
 	final public function setLink(string $link): IIndexDocument {
 		$this->link = $link;
 
@@ -497,16 +496,17 @@ class IndexDocument implements IIndexDocument, JsonSerializable {
 	 *
 	 * @since 15.0.0
 	 */
+	#[\Override]
 	final public function getLink(): string {
 		return $this->link;
 	}
-
 
 	/**
 	 * Set more information that couldn't be set using other method.
 	 *
 	 * @since 15.0.0
 	 */
+	#[\Override]
 	final public function setMore(array $more): IIndexDocument {
 		$this->more = $more;
 
@@ -518,10 +518,10 @@ class IndexDocument implements IIndexDocument, JsonSerializable {
 	 *
 	 * @since 15.0.0
 	 */
+	#[\Override]
 	final public function getMore(): array {
 		return $this->more;
 	}
-
 
 	/**
 	 * Add some excerpt of the content of the original document, usually based
@@ -529,9 +529,10 @@ class IndexDocument implements IIndexDocument, JsonSerializable {
 	 *
 	 * @since 16.0.0
 	 */
+	#[\Override]
 	final public function addExcerpt(string $source, string $excerpt): IIndexDocument {
-		$this->excerpts[] =
-			[
+		$this->excerpts[]
+			= [
 				'source' => $source,
 				'excerpt' => $this->cleanExcerpt($excerpt)
 			];
@@ -539,12 +540,12 @@ class IndexDocument implements IIndexDocument, JsonSerializable {
 		return $this;
 	}
 
-
 	/**
 	 * Set all excerpts of the content of the original document.
 	 *
 	 * @since 16.0.0
 	 */
+	#[\Override]
 	final public function setExcerpts(array $excerpts): IIndexDocument {
 		$new = [];
 		foreach ($excerpts as $entry) {
@@ -564,6 +565,7 @@ class IndexDocument implements IIndexDocument, JsonSerializable {
 	 *
 	 * @since 15.0.0
 	 */
+	#[\Override]
 	final public function getExcerpts(): array {
 		return $this->excerpts;
 	}
@@ -574,9 +576,9 @@ class IndexDocument implements IIndexDocument, JsonSerializable {
 	 * @since 16.0.0
 	 */
 	private function cleanExcerpt(string $excerpt): string {
-		$excerpt = str_replace("\\n", ' ', $excerpt);
-		$excerpt = str_replace("\\r", ' ', $excerpt);
-		$excerpt = str_replace("\\t", ' ', $excerpt);
+		$excerpt = str_replace('\\n', ' ', $excerpt);
+		$excerpt = str_replace('\\r', ' ', $excerpt);
+		$excerpt = str_replace('\\t', ' ', $excerpt);
 		$excerpt = str_replace("\n", ' ', $excerpt);
 		$excerpt = str_replace("\r", ' ', $excerpt);
 		$excerpt = str_replace("\t", ' ', $excerpt);
@@ -584,13 +586,13 @@ class IndexDocument implements IIndexDocument, JsonSerializable {
 		return $excerpt;
 	}
 
-
 	/**
 	 * Set the score to the result assigned to this document during a search
 	 * request.
 	 *
 	 * @since 15.0.0
 	 */
+	#[\Override]
 	final public function setScore(string $score): IIndexDocument {
 		$this->score = $score;
 
@@ -602,10 +604,10 @@ class IndexDocument implements IIndexDocument, JsonSerializable {
 	 *
 	 * @since 15.0.0
 	 */
+	#[\Override]
 	final public function getScore(): string {
 		return $this->score;
 	}
-
 
 	/**
 	 * Set some information about the original document that will be available
@@ -616,6 +618,7 @@ class IndexDocument implements IIndexDocument, JsonSerializable {
 	 *
 	 * @since 15.0.0
 	 */
+	#[\Override]
 	final public function setInfo(string $info, string $value): IIndexDocument {
 		$this->info[$info] = $value;
 
@@ -627,6 +630,7 @@ class IndexDocument implements IIndexDocument, JsonSerializable {
 	 *
 	 * @since 15.0.0
 	 */
+	#[\Override]
 	final public function getInfo(string $info, string $default = ''): string {
 		if (!key_exists($info, $this->info)) {
 			return $default;
@@ -644,6 +648,7 @@ class IndexDocument implements IIndexDocument, JsonSerializable {
 	 *
 	 * @since 15.0.0
 	 */
+	#[\Override]
 	final public function setInfoArray(string $info, array $value): IIndexDocument {
 		$this->info[$info] = $value;
 
@@ -655,6 +660,7 @@ class IndexDocument implements IIndexDocument, JsonSerializable {
 	 *
 	 * @since 15.0.0
 	 */
+	#[\Override]
 	final public function getInfoArray(string $info, array $default = []): array {
 		if (!key_exists($info, $this->info)) {
 			return $default;
@@ -672,6 +678,7 @@ class IndexDocument implements IIndexDocument, JsonSerializable {
 	 *
 	 * @since 15.0.0
 	 */
+	#[\Override]
 	final public function setInfoInt(string $info, int $value): IIndexDocument {
 		$this->info[$info] = $value;
 
@@ -683,6 +690,7 @@ class IndexDocument implements IIndexDocument, JsonSerializable {
 	 *
 	 * @since 15.0.0
 	 */
+	#[\Override]
 	final public function getInfoInt(string $info, int $default = 0): int {
 		if (!key_exists($info, $this->info)) {
 			return $default;
@@ -700,6 +708,7 @@ class IndexDocument implements IIndexDocument, JsonSerializable {
 	 *
 	 * @since 15.0.0
 	 */
+	#[\Override]
 	final public function setInfoBool(string $info, bool $value): IIndexDocument {
 		$this->info[$info] = $value;
 
@@ -711,6 +720,7 @@ class IndexDocument implements IIndexDocument, JsonSerializable {
 	 *
 	 * @since 15.0.0
 	 */
+	#[\Override]
 	final public function getInfoBool(string $info, bool $default = false): bool {
 		if (!key_exists($info, $this->info)) {
 			return $default;
@@ -724,6 +734,7 @@ class IndexDocument implements IIndexDocument, JsonSerializable {
 	 *
 	 * @since 15.0.0
 	 */
+	#[\Override]
 	final public function getInfoAll(): array {
 		$info = [];
 		foreach ($this->info as $k => $v) {
@@ -736,7 +747,6 @@ class IndexDocument implements IIndexDocument, JsonSerializable {
 
 		return $info;
 	}
-
 
 	/**
 	 * @since 15.0.0
@@ -768,6 +778,7 @@ class IndexDocument implements IIndexDocument, JsonSerializable {
 	/**
 	 * @since 15.0.0
 	 */
+	#[\Override]
 	public function jsonSerialize(): array {
 		return [
 			'id' => $this->getId(),

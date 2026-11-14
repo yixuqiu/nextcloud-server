@@ -1,42 +1,24 @@
 <?php
+
 /**
- * @copyright Copyright (c) 2016, ownCloud, Inc.
- *
- * @author Björn Schießle <bjoern@schiessle.org>
- * @author Christoph Wurst <christoph@winzerhof-wurst.at>
- * @author Joas Schilling <coding@schilljs.com>
- * @author Lukas Reschke <lukas@statuscode.ch>
- * @author Maxence Lange <maxence@artificial-owl.com>
- * @author Robin Appelman <robin@icewind.nl>
- * @author Roeland Jago Douma <roeland@famdouma.nl>
- * @author Thomas Müller <thomas.mueller@tmit.eu>
- * @author Vincent Petry <vincent@nextcloud.com>
- *
- * @license AGPL-3.0
- *
- * This code is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License, version 3,
- * as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program. If not, see <http://www.gnu.org/licenses/>
- *
+ * SPDX-FileCopyrightText: 2016-2024 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-FileCopyrightText: 2016 ownCloud, Inc.
+ * SPDX-License-Identifier: AGPL-3.0-only
  */
+
 namespace OCA\DAV\Connector;
 
 use OCA\DAV\Connector\Sabre\PublicAuth;
+use OCP\Defaults;
 use OCP\IRequest;
 use OCP\ISession;
+use OCP\IUserSession;
 use OCP\Security\Bruteforce\IThrottler;
 use OCP\Share\Exceptions\ShareNotFound;
 use OCP\Share\IManager;
 use OCP\Share\IShare;
 use Sabre\DAV\Auth\Backend\AbstractBasic;
+use Sabre\DAV\Exception\NotAuthenticated;
 
 /**
  * Class PublicAuth
@@ -44,25 +26,19 @@ use Sabre\DAV\Auth\Backend\AbstractBasic;
  * @package OCA\DAV\Connector
  */
 class LegacyPublicAuth extends AbstractBasic {
-	private const BRUTEFORCE_ACTION = 'legacy_public_webdav_auth';
+	private const string BRUTEFORCE_ACTION = 'legacy_public_webdav_auth';
 
 	private ?IShare $share = null;
-	private IManager $shareManager;
-	private ISession $session;
-	private IRequest $request;
-	private IThrottler $throttler;
 
-	public function __construct(IRequest $request,
-		IManager $shareManager,
-		ISession $session,
-		IThrottler $throttler) {
-		$this->request = $request;
-		$this->shareManager = $shareManager;
-		$this->session = $session;
-		$this->throttler = $throttler;
-
+	public function __construct(
+		private IRequest $request,
+		private IManager $shareManager,
+		private ISession $session,
+		private IThrottler $throttler,
+		private IUserSession $userSession,
+	) {
 		// setup realm
-		$defaults = new \OCP\Defaults();
+		$defaults = new Defaults();
 		$this->realm = $defaults->getName() ?: 'Nextcloud';
 	}
 
@@ -78,6 +54,7 @@ class LegacyPublicAuth extends AbstractBasic {
 	 * @return bool
 	 * @throws \Sabre\DAV\Exception\NotAuthenticated
 	 */
+	#[\Override]
 	protected function validateUserPass($username, $password) {
 		$this->throttler->sleepDelayOrThrowOnMax($this->request->getRemoteAddress(), self::BRUTEFORCE_ACTION);
 
@@ -90,29 +67,36 @@ class LegacyPublicAuth extends AbstractBasic {
 
 		$this->share = $share;
 
-		\OC_User::setIncognitoMode(true);
+		$this->userSession->setIncognitoMode(true);
 
 		// check if the share is password protected
-		if ($share->getPassword() !== null) {
+		if ($share->isPasswordProtected()) {
 			if ($share->getShareType() === IShare::TYPE_LINK
 				|| $share->getShareType() === IShare::TYPE_EMAIL
 				|| $share->getShareType() === IShare::TYPE_CIRCLE) {
+				// Validate password if provided
 				if ($this->shareManager->checkPassword($share, $password)) {
-					return true;
-				} elseif ($this->session->exists(PublicAuth::DAV_AUTHENTICATED)
-					&& $this->session->get(PublicAuth::DAV_AUTHENTICATED) === $share->getId()) {
-					return true;
-				} else {
-					if (in_array('XMLHttpRequest', explode(',', $this->request->getHeader('X-Requested-With')))) {
-						// do not re-authenticate over ajax, use dummy auth name to prevent browser popup
-						http_response_code(401);
-						header('WWW-Authenticate: DummyBasic realm="' . $this->realm . '"');
-						throw new \Sabre\DAV\Exception\NotAuthenticated('Cannot authenticate over ajax calls');
+					// If not set, set authenticated session cookie
+					if (!PublicAuth::isShareInSession($this->session, $share)) {
+						PublicAuth::addShareToSession($this->session, $share);
 					}
-
-					$this->throttler->registerAttempt(self::BRUTEFORCE_ACTION, $this->request->getRemoteAddress());
-					return false;
+					return true;
 				}
+
+				// We are already authenticated for this share in the session
+				if (PublicAuth::isShareInSession($this->session, $share)) {
+					return true;
+				}
+
+				if (in_array('XMLHttpRequest', explode(',', $this->request->getHeader('X-Requested-With')), true)) {
+					// do not re-authenticate over ajax, use dummy auth name to prevent browser popup
+					http_response_code(401);
+					header('WWW-Authenticate: DummyBasic realm="' . $this->realm . '"');
+					throw new NotAuthenticated('Cannot authenticate over ajax calls');
+				}
+
+				$this->throttler->registerAttempt(self::BRUTEFORCE_ACTION, $this->request->getRemoteAddress());
+				return false;
 			} elseif ($share->getShareType() === IShare::TYPE_REMOTE) {
 				return true;
 			} else {
@@ -123,8 +107,7 @@ class LegacyPublicAuth extends AbstractBasic {
 		return true;
 	}
 
-	public function getShare(): IShare {
-		assert($this->share !== null);
+	public function getShare(): ?IShare {
 		return $this->share;
 	}
 }

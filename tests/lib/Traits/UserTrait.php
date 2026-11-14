@@ -1,23 +1,28 @@
 <?php
+
 /**
- * Copyright (c) 2015 Robin Appelman <icewind@owncloud.com>
- * This file is licensed under the Affero General Public License version 3 or
- * later.
- * See the COPYING-README file.
+ * SPDX-FileCopyrightText: 2022-2024 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-FileCopyrightText: 2016 ownCloud, Inc.
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
 namespace Test\Traits;
 
 use OC\User\User;
+use OCP\EventDispatcher\IEventDispatcher;
 use OCP\IUser;
+use OCP\IUserManager;
+use OCP\Server;
+use Test\Util\User\Dummy;
 
 class DummyUser extends User {
-	private string $uid;
-
-	public function __construct(string $uid) {
-		$this->uid = $uid;
+	public function __construct(
+		private string $uid,
+	) {
+		parent::__construct($this->uid, null, Server::get(IEventDispatcher::class));
 	}
 
+	#[\Override]
 	public function getUID(): string {
 		return $this->uid;
 	}
@@ -27,22 +32,19 @@ class DummyUser extends User {
  * Allow creating users in a temporary backend
  */
 trait UserTrait {
-	/**
-	 * @var \Test\Util\User\Dummy|\OCP\UserInterface
-	 */
-	protected $userBackend;
+	protected Dummy $userBackend;
 
-	protected function createUser($name, $password): IUser {
+	protected function createUser(string $name, string $password): IUser {
 		$this->userBackend->createUser($name, $password);
 		return new DummyUser($name);
 	}
 
-	protected function setUpUserTrait() {
-		$this->userBackend = new \Test\Util\User\Dummy();
-		\OC::$server->getUserManager()->registerBackend($this->userBackend);
+	protected function setUpUserTrait(): void {
+		$this->userBackend = new Dummy();
+		Server::get(IUserManager::class)->registerBackend($this->userBackend);
 	}
 
-	protected function tearDownUserTrait() {
-		\OC::$server->getUserManager()->removeBackend($this->userBackend);
+	protected function tearDownUserTrait(): void {
+		Server::get(IUserManager::class)->removeBackend($this->userBackend);
 	}
 }

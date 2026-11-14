@@ -1,29 +1,14 @@
 <?php
+
 /**
- * @copyright Copyright (c) 2016, ownCloud, Inc.
- *
- * @author Julius Härtl <jus@bitgrid.net>
- * @author Morris Jobke <hey@morrisjobke.de>
- * @author Robin Appelman <robin@icewind.nl>
- * @author szaimen <szaimen@e.mail.de>
- *
- * @license AGPL-3.0
- *
- * This code is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License, version 3,
- * as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program. If not, see <http://www.gnu.org/licenses/>
- *
+ * SPDX-FileCopyrightText: 2016-2024 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-FileCopyrightText: 2016 ownCloud, Inc.
+ * SPDX-License-Identifier: AGPL-3.0-only
  */
+
 namespace OCP\Files\Config;
 
+use OCP\Files\Cache\ICacheEntry;
 use OCP\Files\Mount\IMountPoint;
 use OCP\Files\NotFoundException;
 use OCP\IUser;
@@ -129,7 +114,10 @@ interface IUserMountCache {
 	public function clear(): void;
 
 	/**
-	 * Get all cached mounts for a user
+	 * Get the cached mount for a path
+	 *
+	 * This walks up the directly tree until a mount is found, if you only want
+	 * to get the mount at the specific path, use `getMountAtPath` instead.
 	 *
 	 * @param IUser $user
 	 * @param string $path
@@ -149,4 +137,25 @@ interface IUserMountCache {
 	 * @since 24.0.0
 	 */
 	public function getMountsInPath(IUser $user, string $path): array;
+
+	/**
+	 * Remove a mount by it's mountpoint
+	 *
+	 * @since 33.0.0
+	 */
+	public function removeMount(string $mountPoint, ?IUser $user = null): void;
+
+	/**
+	 * Register a new mountpoint for a user
+	 *
+	 * @since 33.0.0
+	 */
+	public function addMount(IUser $user, string $mountPoint, ICacheEntry $rootCacheEntry, string $mountProvider, ?int $mountId = null): void;
+
+	/**
+	 * Get the mount at the specified path, if any
+	 *
+	 * @since 33.0.2
+	 */
+	public function getMountAtPath(IUser $user, string $mountPoint): ?ICachedMountInfo;
 }

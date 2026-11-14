@@ -1,27 +1,10 @@
 <?php
+
 /**
- * @copyright Copyright (c) 2017 Arthur Schiwon <blizzz@arthur-schiwon.de>
- *
- * @author Arthur Schiwon <blizzz@arthur-schiwon.de>
- * @author Christoph Wurst <christoph@winzerhof-wurst.at>
- * @author Joas Schilling <coding@schilljs.com>
- *
- * @license GNU AGPL version 3 or any later version
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
- *
+ * SPDX-FileCopyrightText: 2017 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
+
 namespace OC\Collaboration\Collaborators;
 
 use OCP\Collaboration\Collaborators\ISearchResult;
@@ -34,6 +17,7 @@ class SearchResult implements ISearchResult {
 
 	protected array $exactIdMatches = [];
 
+	#[\Override]
 	public function addResultSet(SearchResultType $type, array $matches, ?array $exactMatches = null): void {
 		$type = $type->getLabel();
 		if (!isset($this->result[$type])) {
@@ -47,14 +31,17 @@ class SearchResult implements ISearchResult {
 		}
 	}
 
+	#[\Override]
 	public function markExactIdMatch(SearchResultType $type): void {
 		$this->exactIdMatches[$type->getLabel()] = 1;
 	}
 
+	#[\Override]
 	public function hasExactIdMatch(SearchResultType $type): bool {
 		return isset($this->exactIdMatches[$type->getLabel()]);
 	}
 
+	#[\Override]
 	public function hasResult(SearchResultType $type, $collaboratorId): bool {
 		$type = $type->getLabel();
 		if (!isset($this->result[$type])) {
@@ -73,10 +60,12 @@ class SearchResult implements ISearchResult {
 		return false;
 	}
 
+	#[\Override]
 	public function asArray(): array {
 		return $this->result;
 	}
 
+	#[\Override]
 	public function unsetResult(SearchResultType $type): void {
 		$type = $type->getLabel();
 		$this->result[$type] = [];
@@ -85,6 +74,7 @@ class SearchResult implements ISearchResult {
 		}
 	}
 
+	#[\Override]
 	public function removeCollaboratorResult(SearchResultType $type, string $collaboratorId): bool {
 		$type = $type->getLabel();
 		if (!isset($this->result[$type])) {

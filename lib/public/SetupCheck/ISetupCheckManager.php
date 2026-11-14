@@ -3,35 +3,47 @@
 declare(strict_types=1);
 
 /**
- * @copyright Copyright (c) 2023 Côme Chilliet <come.chilliet@nextcloud.com>
- *
- * @author Côme Chilliet <come.chilliet@nextcloud.com>
- *
- * @license AGPL-3.0
- *
- * This code is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License, version 3,
- * as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program. If not, see <http://www.gnu.org/licenses/>
- *
+ * SPDX-FileCopyrightText: 2023 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-only
  */
 
 namespace OCP\SetupCheck;
+
+use OCP\Migration\IOutput;
 
 /**
  * @since 28.0.0
  */
 interface ISetupCheckManager {
 	/**
+	 * Run all setup checks and return the results.
+	 *
+	 * @param ?IOutput $output - Reports the check that is about to run as debug output, so a check that crashes or runs out of memory can be identified.
 	 * @since 28.0.0
+	 * @since 36.0.0 - parameter $output was added
 	 * @return array<string,array<string,SetupResult>> Result of each check, first level key is category, second level key is title
 	 */
-	public function runAll(): array;
+	public function runAll(?IOutput $output = null): array;
+
+	/**
+	 * Run all tests from one specific category and return the results.
+	 *
+	 * @param string $filterByCategory - The id of the category to run.
+	 * @param ?IOutput $output - Reports the check that is about to run as debug output, so a check that crashes or runs out of memory can be identified.
+	 * @return array<string,array<string,SetupResult>> Result of each check, first level key is category, second level key is title
+	 * @since 35.0.0
+	 * @since 36.0.0 - parameter $output was added
+	 */
+	public function runByCategory(string $filterByCategory, ?IOutput $output = null): array;
+
+	/**
+	 * Run all tests from one specific class and return the results.
+	 *
+	 * @param string $filterByClass - The class to run.
+	 * @param ?IOutput $output - Reports the check that is about to run as debug output, so a check that crashes or runs out of memory can be identified.
+	 * @return array<string,array<string,SetupResult>> Result of each check, first level key is category, second level key is title
+	 * @since 35.0.0
+	 * @since 36.0.0 - parameter $output was added
+	 */
+	public function runByClass(string $filterByClass, ?IOutput $output = null): array;
 }

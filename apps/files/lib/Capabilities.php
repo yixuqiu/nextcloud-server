@@ -1,52 +1,45 @@
 <?php
+
+declare(strict_types=1);
+
 /**
- * @copyright Copyright (c) 2016, ownCloud, Inc.
- *
- * @author Christopher Schäpers <kondou@ts.unde.re>
- * @author Joas Schilling <coding@schilljs.com>
- * @author Julius Härtl <jus@bitgrid.net>
- * @author Roeland Jago Douma <roeland@famdouma.nl>
- * @author Tom Needham <tom@owncloud.com>
- *
- * @license AGPL-3.0
- *
- * This code is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License, version 3,
- * as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program. If not, see <http://www.gnu.org/licenses/>
- *
+ * SPDX-FileCopyrightText: 2016-2024 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-FileCopyrightText: 2016 ownCloud, Inc.
+ * SPDX-License-Identifier: AGPL-3.0-only
  */
+
 namespace OCA\Files;
 
+use OCA\Files\Service\ChunkedUploadConfig;
 use OCP\Capabilities\ICapability;
-use OCP\IConfig;
+use OCP\Files\Conversion\ConversionMimeProvider;
+use OCP\Files\Conversion\IConversionManager;
 
 class Capabilities implements ICapability {
 
-	protected IConfig $config;
-
-	public function __construct(IConfig $config) {
-		$this->config = $config;
+	public function __construct(
+		protected IConversionManager $fileConversionManager,
+	) {
 	}
 
 	/**
 	 * Return this classes capabilities
 	 *
-	 * @return array{files: array{bigfilechunking: bool, blacklisted_files: array<mixed>, forbidden_filename_characters: array<string>}}
+	 * @return array{files: array{bigfilechunking: bool, chunked_upload: array{max_size: int, max_parallel_count: int}, file_conversions: list<array{from: string, to: string, extension: string, displayName: string}>}}
 	 */
-	public function getCapabilities() {
+	#[\Override]
+	public function getCapabilities(): array {
 		return [
 			'files' => [
 				'bigfilechunking' => true,
-				'blacklisted_files' => (array)$this->config->getSystemValue('blacklisted_files', ['.htaccess']),
-				'forbidden_filename_characters' => \OCP\Util::getForbiddenFileNameChars(),
+				'chunked_upload' => [
+					'max_size' => ChunkedUploadConfig::getMaxChunkSize(),
+					'max_parallel_count' => ChunkedUploadConfig::getMaxParallelCount(),
+				],
+
+				'file_conversions' => array_map(function (ConversionMimeProvider $mimeProvider) {
+					return $mimeProvider->jsonSerialize();
+				}, $this->fileConversionManager->getProviders()),
 			],
 		];
 	}

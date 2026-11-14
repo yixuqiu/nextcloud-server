@@ -3,24 +3,8 @@
 declare(strict_types=1);
 
 /**
- * @copyright Copyright (c) 2023 Marcel Klehr <mklehr@gmx.net>
- *
- * @author Marcel Klehr <mklehr@gmx.net>
- *
- * @license GNU AGPL version 3 or any later version
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
+ * SPDX-FileCopyrightText: 2023 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
 namespace OC\TextToImage;
@@ -37,7 +21,6 @@ use OCP\Files\IAppData;
 use OCP\Files\NotFoundException;
 use OCP\Files\NotPermittedException;
 use OCP\IConfig;
-use OCP\IServerContainer;
 use OCP\PreConditionNotMetException;
 use OCP\TextToImage\Exception\TaskFailureException;
 use OCP\TextToImage\Exception\TaskNotFoundException;
@@ -45,6 +28,7 @@ use OCP\TextToImage\IManager;
 use OCP\TextToImage\IProvider;
 use OCP\TextToImage\IProviderWithUserId;
 use OCP\TextToImage\Task;
+use Psr\Container\ContainerInterface;
 use Psr\Log\LoggerInterface;
 use RuntimeException;
 use Throwable;
@@ -55,7 +39,7 @@ class Manager implements IManager {
 	private IAppData $appData;
 
 	public function __construct(
-		private IServerContainer $serverContainer,
+		private ContainerInterface $serverContainer,
 		private Coordinator $coordinator,
 		private LoggerInterface $logger,
 		private IJobList $jobList,
@@ -69,6 +53,7 @@ class Manager implements IManager {
 	/**
 	 * @inheritDoc
 	 */
+	#[\Override]
 	public function getProviders(): array {
 		$context = $this->coordinator->getRegistrationContext();
 		if ($context === null) {
@@ -100,6 +85,7 @@ class Manager implements IManager {
 	/**
 	 * @inheritDoc
 	 */
+	#[\Override]
 	public function hasProviders(): bool {
 		$context = $this->coordinator->getRegistrationContext();
 		if ($context === null) {
@@ -111,6 +97,7 @@ class Manager implements IManager {
 	/**
 	 * @inheritDoc
 	 */
+	#[\Override]
 	public function runTask(Task $task): void {
 		$this->logger->debug('Running TextToImage Task');
 		if (!$this->hasProviders()) {
@@ -119,11 +106,11 @@ class Manager implements IManager {
 		$providers = $this->getPreferredProviders();
 
 		foreach ($providers as $provider) {
-			$this->logger->debug('Trying to run Text2Image provider '.$provider::class);
+			$this->logger->debug('Trying to run Text2Image provider ' . $provider::class);
 			try {
 				$task->setStatus(Task::STATUS_RUNNING);
 				$completionExpectedAt = new \DateTime('now');
-				$completionExpectedAt->add(new \DateInterval('PT'.$provider->getExpectedRuntime().'S'));
+				$completionExpectedAt->add(new \DateInterval('PT' . $provider->getExpectedRuntime() . 'S'));
 				$task->setCompletionExpectedAt($completionExpectedAt);
 				if ($task->getId() === null) {
 					$this->logger->debug('Inserting Text2Image task into DB');
@@ -135,21 +122,21 @@ class Manager implements IManager {
 				}
 				try {
 					$folder = $this->appData->getFolder('text2image');
-				} catch(NotFoundException) {
+				} catch (NotFoundException) {
 					$this->logger->debug('Creating folder in appdata for Text2Image results');
 					$folder = $this->appData->newFolder('text2image');
 				}
 				try {
-					$folder = $folder->getFolder((string) $task->getId());
-				} catch(NotFoundException) {
+					$folder = $folder->getFolder((string)$task->getId());
+				} catch (NotFoundException) {
 					$this->logger->debug('Creating new folder in appdata Text2Image results folder');
-					$folder = $folder->newFolder((string) $task->getId());
+					$folder = $folder->newFolder((string)$task->getId());
 				}
 				$this->logger->debug('Creating result files for Text2Image task');
 				$resources = [];
 				$files = [];
 				for ($i = 0; $i < $task->getNumberOfImages(); $i++) {
-					$file = $folder->newFile((string) $i);
+					$file = $folder->newFile((string)$i);
 					$files[] = $file;
 					$resource = $file->write();
 					if ($resource !== false && $resource !== true && is_resource($resource)) {
@@ -178,7 +165,7 @@ class Manager implements IManager {
 					if (isset($files, $files[$i])) {
 						try {
 							$files[$i]->delete();
-						} catch(NotPermittedException $e) {
+						} catch (NotPermittedException $e) {
 							$this->logger->warning('Failed to clean up Text2Image result file after error', ['exception' => $e]);
 						}
 					}
@@ -207,6 +194,7 @@ class Manager implements IManager {
 	/**
 	 * @inheritDoc
 	 */
+	#[\Override]
 	public function scheduleTask(Task $task): void {
 		if (!$this->hasProviders()) {
 			throw new PreConditionNotMetException('No text to image provider is installed that can handle this task');
@@ -214,7 +202,7 @@ class Manager implements IManager {
 		$this->logger->debug('Scheduling Text2Image Task');
 		$task->setStatus(Task::STATUS_SCHEDULED);
 		$completionExpectedAt = new \DateTime('now');
-		$completionExpectedAt->add(new \DateInterval('PT'.$this->getPreferredProviders()[0]->getExpectedRuntime().'S'));
+		$completionExpectedAt->add(new \DateInterval('PT' . $this->getPreferredProviders()[0]->getExpectedRuntime() . 'S'));
 		$task->setCompletionExpectedAt($completionExpectedAt);
 		$taskEntity = DbTask::fromPublicTask($task);
 		$this->taskMapper->insert($taskEntity);
@@ -227,12 +215,13 @@ class Manager implements IManager {
 	/**
 	 * @inheritDoc
 	 */
+	#[\Override]
 	public function runOrScheduleTask(Task $task) : void {
 		if (!$this->hasProviders()) {
 			throw new PreConditionNotMetException('No text to image provider is installed that can handle this task');
 		}
 		$providers = $this->getPreferredProviders();
-		$maxExecutionTime = (int) ini_get('max_execution_time');
+		$maxExecutionTime = (int)ini_get('max_execution_time');
 		// Offload the task to a background job if the expected runtime of the likely provider is longer than 80% of our max execution time
 		if ($providers[0]->getExpectedRuntime() > $maxExecutionTime * 0.8) {
 			$this->scheduleTask($task);
@@ -244,6 +233,7 @@ class Manager implements IManager {
 	/**
 	 * @inheritDoc
 	 */
+	#[\Override]
 	public function deleteTask(Task $task): void {
 		$taskEntity = DbTask::fromPublicTask($task);
 		$this->taskMapper->delete($taskEntity);
@@ -260,6 +250,7 @@ class Manager implements IManager {
 	 * @throws RuntimeException If the query failed
 	 * @throws TaskNotFoundException If the task could not be found
 	 */
+	#[\Override]
 	public function getTask(int $id): Task {
 		try {
 			$taskEntity = $this->taskMapper->find($id);
@@ -283,6 +274,7 @@ class Manager implements IManager {
 	 * @throws RuntimeException If the query failed
 	 * @throws TaskNotFoundException If the task could not be found
 	 */
+	#[\Override]
 	public function getUserTask(int $id, ?string $userId): Task {
 		try {
 			$taskEntity = $this->taskMapper->findByIdAndUser($id, $userId);
@@ -307,6 +299,7 @@ class Manager implements IManager {
 	 * @return Task[]
 	 * @throws RuntimeException
 	 */
+	#[\Override]
 	public function getUserTasksByApp(?string $userId, string $appId, ?string $identifier = null): array {
 		try {
 			$taskEntities = $this->taskMapper->findUserTasksByApp($userId, $appId, $identifier);

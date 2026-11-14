@@ -3,32 +3,16 @@
 declare(strict_types=1);
 
 /**
- * @copyright Copyright (c) 2023 Côme Chilliet <come.chilliet@nextcloud.com>
- *
- * @author Côme Chilliet <come.chilliet@nextcloud.com>
- *
- * @license GNU AGPL version 3 or any later version
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
- *
+ * SPDX-FileCopyrightText: 2023 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
+
 namespace OCA\Settings\SetupChecks;
 
-use Doctrine\DBAL\Types\BigIntType;
 use OC\Core\Command\Db\ConvertFilecacheBigInt;
 use OC\DB\Connection;
 use OC\DB\SchemaWrapper;
+use OCP\DB\Types;
 use OCP\EventDispatcher\IEventDispatcher;
 use OCP\IDBConnection;
 use OCP\IL10N;
@@ -46,10 +30,12 @@ class DatabasePendingBigIntConversions implements ISetupCheck {
 	) {
 	}
 
+	#[\Override]
 	public function getCategory(): string {
 		return 'database';
 	}
 
+	#[\Override]
 	public function getName(): string {
 		return $this->l10n->t('Database pending bigint migrations');
 	}
@@ -71,7 +57,7 @@ class DatabasePendingBigIntConversions implements ISetupCheck {
 				$column = $table->getColumn($columnName);
 				$isAutoIncrement = $column->getAutoincrement();
 				$isAutoIncrementOnSqlite = $isSqlite && $isAutoIncrement;
-				if (!($column->getType() instanceof BigIntType) && !$isAutoIncrementOnSqlite) {
+				if ($column->getType()->getName() !== Types::BIGINT && !$isAutoIncrementOnSqlite) {
 					$pendingColumns[] = $tableName . '.' . $columnName;
 				}
 			}
@@ -80,6 +66,7 @@ class DatabasePendingBigIntConversions implements ISetupCheck {
 		return $pendingColumns;
 	}
 
+	#[\Override]
 	public function run(): SetupResult {
 		$pendingColumns = $this->getBigIntConversionPendingColumns();
 		if (empty($pendingColumns)) {
@@ -91,7 +78,7 @@ class DatabasePendingBigIntConversions implements ISetupCheck {
 			}
 			$list .= "\n";
 			return SetupResult::info(
-				$this->l10n->t('Some columns in the database are missing a conversion to big int. Due to the fact that changing column types on big tables could take some time they were not changed automatically. By running "occ db:convert-filecache-bigint" those pending changes could be applied manually. This operation needs to be made while the instance is offline.').$list,
+				$this->l10n->t('Some columns in the database are missing a conversion to big int. Due to the fact that changing column types on big tables could take some time they were not changed automatically. By running "occ db:convert-filecache-bigint" those pending changes could be applied manually. This operation needs to be made while the instance is offline.') . $list,
 				$this->urlGenerator->linkToDocs('admin-bigint-conversion')
 			);
 		}

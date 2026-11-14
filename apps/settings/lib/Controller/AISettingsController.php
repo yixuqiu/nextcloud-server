@@ -3,60 +3,66 @@
 declare(strict_types=1);
 
 /**
- * @copyright Copyright (c) 2023  Marcel Klehr <mklehr@gmx.net>
- *
- * @license AGPL-3.0
- *
- * This code is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License, version 3,
- * as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program. If not, see <http://www.gnu.org/licenses/>
- *
+ * SPDX-FileCopyrightText: 2023 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-only
  */
+
 namespace OCA\Settings\Controller;
 
+use OCA\Settings\Settings\Admin\ArtificialIntelligence;
 use OCP\AppFramework\Controller;
+use OCP\AppFramework\Http;
+use OCP\AppFramework\Http\Attribute\AuthorizedAdminSetting;
 use OCP\AppFramework\Http\DataResponse;
-use OCP\IConfig;
+use OCP\EventDispatcher\IEventDispatcher;
+use OCP\IAppConfig;
 use OCP\IRequest;
+use OCP\Log\Audit\CriticalActionPerformedEvent;
 
 class AISettingsController extends Controller {
 
-	/**
-	 * @param string $appName
-	 * @param IRequest $request
-	 * @param IConfig $config
-	 */
 	public function __construct(
 		$appName,
 		IRequest $request,
-		private IConfig $config,
+		private string $userId,
+		private IAppConfig $appConfig,
+		private IEventDispatcher $eventDispatcher,
 	) {
 		parent::__construct($appName, $request);
 	}
 
 	/**
-	 * Sets the email settings
-	 *
-	 * @AuthorizedAdminSetting(settings=OCA\Settings\Settings\Admin\ArtificialIntelligence)
+	 * Sets the AI settings
 	 *
 	 * @param array $settings
 	 * @return DataResponse
 	 */
+	#[AuthorizedAdminSetting(settings: ArtificialIntelligence::class)]
 	public function update($settings) {
-		$keys = ['ai.stt_provider', 'ai.textprocessing_provider_preferences', 'ai.translation_provider_preferences', 'ai.text2image_provider'];
+		$keys = ['ai.stt_provider', 'ai.textprocessing_provider_preferences', 'ai.taskprocessing_provider_preferences','ai.taskprocessing_type_preferences', 'ai.translation_provider_preferences', 'ai.text2image_provider', 'ai.taskprocessing_guests'];
 		foreach ($keys as $key) {
 			if (!isset($settings[$key])) {
 				continue;
 			}
-			$this->config->setAppValue('core', $key, json_encode($settings[$key]));
+			try {
+				$settings[$key] = json_encode($settings[$key], flags: \JSON_THROW_ON_ERROR);
+			} catch (\JsonException) {
+				return new DataResponse(['error' => "Setting value for '$key' must be JSON-compatible"], Http::STATUS_BAD_REQUEST);
+			}
+		}
+		foreach ($keys as $key) {
+			if (!isset($settings[$key])) {
+				continue;
+			}
+			$changed = $this->appConfig->setValueString('core', $key, $settings[$key], lazy: in_array($key, \OC\TaskProcessing\Manager::LAZY_CONFIG_KEYS, true));
+			if ($changed) {
+				$this->eventDispatcher->dispatchTyped(new CriticalActionPerformedEvent(
+					'AI configuration was changed by user %s: %s was set to %s',
+					['userId' => $this->userId, 'configKey' => $key, 'configValue' => $settings[$key]],
+					false,
+					'settings.ai.updated',
+				));
+			}
 		}
 
 		return new DataResponse();

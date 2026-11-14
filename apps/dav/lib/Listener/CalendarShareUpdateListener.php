@@ -3,26 +3,10 @@
 declare(strict_types=1);
 
 /**
- * @copyright 2022 Thomas Citharel <nextcloud@tcit.fr>
- *
- * @author Thomas Citharel <nextcloud@tcit.fr>
- *
- * @license GNU AGPL version 3 or any later version
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
- *
+ * SPDX-FileCopyrightText: 2022 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
+
 namespace OCA\DAV\Listener;
 
 use OCA\DAV\CalDAV\Activity\Backend;
@@ -33,25 +17,23 @@ use Psr\Log\LoggerInterface;
 
 /** @template-implements IEventListener<CalendarShareUpdatedEvent> */
 class CalendarShareUpdateListener implements IEventListener {
-	private Backend $activityBackend;
-	private LoggerInterface $logger;
-
-	public function __construct(Backend $activityBackend,
-		LoggerInterface $logger) {
-		$this->activityBackend = $activityBackend;
-		$this->logger = $logger;
+	public function __construct(
+		private Backend $activityBackend,
+		private LoggerInterface $logger,
+	) {
 	}
 
 	/**
 	 * In case the user has set their default calendar to the deleted one
 	 */
+	#[\Override]
 	public function handle(Event $event): void {
 		if (!($event instanceof CalendarShareUpdatedEvent)) {
 			// Not what we subscribed to
 			return;
 		}
 
-		$this->logger->debug("Creating activity for Calendar having its shares updated");
+		$this->logger->debug('Creating activity for Calendar having its shares updated');
 
 		$this->activityBackend->onCalendarUpdateShares(
 			$event->getCalendarData(),
@@ -59,5 +41,7 @@ class CalendarShareUpdateListener implements IEventListener {
 			$event->getAdded(),
 			$event->getRemoved()
 		);
+
+		// Here we should recalculate if reminders should be sent to new or old sharees
 	}
 }

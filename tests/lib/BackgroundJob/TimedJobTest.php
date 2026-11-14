@@ -1,41 +1,29 @@
 <?php
+
 /**
- * Copyright (c) 2013 Robin Appelman <icewind@owncloud.com>
- * This file is licensed under the Affero General Public License version 3 or
- * later.
- * See the COPYING-README file.
+ * SPDX-FileCopyrightText: 2018-2024 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-FileCopyrightText: 2016 ownCloud, Inc.
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
 namespace Test\BackgroundJob;
 
 use OCP\AppFramework\Utility\ITimeFactory;
-use OCP\BackgroundJob\TimedJob;
-
-class TestTimedJobNew extends TimedJob {
-	public bool $ran = false;
-
-	public function __construct(ITimeFactory $timeFactory) {
-		parent::__construct($timeFactory);
-		$this->setInterval(10);
-	}
-
-	public function run($argument) {
-		$this->ran = true;
-	}
-}
+use OCP\Server;
 
 class TimedJobTest extends \Test\TestCase {
 	private DummyJobList $jobList;
 	private ITimeFactory $time;
 
+	#[\Override]
 	protected function setUp(): void {
 		parent::setUp();
 
 		$this->jobList = new DummyJobList();
-		$this->time = \OCP\Server::get(ITimeFactory::class);
+		$this->time = Server::get(ITimeFactory::class);
 	}
 
-	public function testShouldRunAfterIntervalNew() {
+	public function testShouldRunAfterIntervalNew(): void {
 		$job = new TestTimedJobNew($this->time);
 		$job->setId(42);
 		$this->jobList->add($job);
@@ -45,7 +33,7 @@ class TimedJobTest extends \Test\TestCase {
 		$this->assertTrue($job->ran);
 	}
 
-	public function testShouldNotRunWithinIntervalNew() {
+	public function testShouldNotRunWithinIntervalNew(): void {
 		$job = new TestTimedJobNew($this->time);
 		$job->setId(42);
 		$this->jobList->add($job);
@@ -55,7 +43,7 @@ class TimedJobTest extends \Test\TestCase {
 		$this->assertFalse($job->ran);
 	}
 
-	public function testShouldNotTwiceNew() {
+	public function testShouldNotTwiceNew(): void {
 		$job = new TestTimedJobNew($this->time);
 		$job->setId(42);
 		$this->jobList->add($job);

@@ -2,39 +2,26 @@
 
 declare(strict_types=1);
 /**
- * @copyright Copyright (c) 2022 Joas Schilling <coding@schilljs.com>
- *
- * @author Joas Schilling <coding@schilljs.com>
- *
- * @license GNU AGPL version 3 or any later version
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
- *
+ * SPDX-FileCopyrightText: 2022 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
 namespace OCP\Config;
 
+use OCP\AppFramework\Attribute\Listenable;
 use OCP\EventDispatcher\Event;
 
 /**
+ * Dispatched before a user preference is deleted via the preferences API; the deletion is rejected unless a listener marks it valid.
+ *
  * @since 25.0.0
  */
+#[Listenable(since: '25.0.0')]
 class BeforePreferenceDeletedEvent extends Event {
 	protected string $userId;
 	protected string $appId;
 	protected string $configKey;
-	protected bool $valid = false;
+	protected ?bool $valid = null;
 
 	/**
 	 * @since 25.0.0
@@ -71,7 +58,19 @@ class BeforePreferenceDeletedEvent extends Event {
 	 * @since 25.0.0
 	 */
 	public function isValid(): bool {
-		return $this->valid;
+		return $this->valid === true;
+	}
+
+	/**
+	 * Whether a listener explicitly refused the change via setValid(false)
+	 *
+	 * Admin contexts (e.g. occ) only block the change when it was rejected,
+	 * while user contexts require it to be valid.
+	 *
+	 * @since 36.0.0
+	 */
+	public function isRejected(): bool {
+		return $this->valid === false;
 	}
 
 	/**

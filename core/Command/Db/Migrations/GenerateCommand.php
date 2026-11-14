@@ -1,27 +1,11 @@
 <?php
+
 /**
- * @copyright Copyright (c) 2017 Joas Schilling <coding@schilljs.com>
- * @copyright Copyright (c) 2017, ownCloud GmbH
- *
- * @author Christoph Wurst <christoph@winzerhof-wurst.at>
- * @author Joas Schilling <coding@schilljs.com>
- * @author Roeland Jago Douma <roeland@famdouma.nl>
- *
- * @license AGPL-3.0
- *
- * This code is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License, version 3,
- * as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program. If not, see <http://www.gnu.org/licenses/>
- *
+ * SPDX-FileCopyrightText: 2017 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-FileCopyrightText: 2017 ownCloud GmbH
+ * SPDX-License-Identifier: AGPL-3.0-only
  */
+
 namespace OC\Core\Command\Db\Migrations;
 
 use OC\DB\Connection;
@@ -33,37 +17,21 @@ use Stecman\Component\Symfony\Console\BashCompletion\Completion\CompletionAwareI
 use Stecman\Component\Symfony\Console\BashCompletion\CompletionContext;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Exception\RuntimeException;
+use Symfony\Component\Console\Helper\QuestionHelper;
 use Symfony\Component\Console\Input\InputArgument;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Question\ConfirmationQuestion;
 
 class GenerateCommand extends Command implements CompletionAwareInterface {
-	protected static $_templateSimple =
-		'<?php
+	private const string TEMPLATE
+		= '<?php
 
 declare(strict_types=1);
 
 /**
- * @copyright Copyright (c) {{year}} FIXME Your name <your@email.com>
- *
- * FIXME @author Your name <your@email.com>
- *
- * @license GNU AGPL version 3 or any later version
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
- *
+ * SPDX-FileCopyrightText: {{year}} Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
 namespace {{namespace}};
@@ -72,6 +40,7 @@ use Closure;
 use OCP\DB\ISchemaWrapper;
 use OCP\Migration\IOutput;
 use OCP\Migration\SimpleMigrationStep;
+use Override;
 
 /**
  * FIXME Auto-generated migration step: Please modify to your needs!
@@ -83,6 +52,7 @@ class {{classname}} extends SimpleMigrationStep {
 	 * @param Closure(): ISchemaWrapper $schemaClosure
 	 * @param array $options
 	 */
+	#[Override]
 	public function preSchemaChange(IOutput $output, Closure $schemaClosure, array $options): void {
 	}
 
@@ -92,6 +62,7 @@ class {{classname}} extends SimpleMigrationStep {
 	 * @param array $options
 	 * @return null|ISchemaWrapper
 	 */
+	#[Override]
 	public function changeSchema(IOutput $output, Closure $schemaClosure, array $options): ?ISchemaWrapper {
 {{schemabody}}
 	}
@@ -101,21 +72,20 @@ class {{classname}} extends SimpleMigrationStep {
 	 * @param Closure(): ISchemaWrapper $schemaClosure
 	 * @param array $options
 	 */
+	#[Override]
 	public function postSchemaChange(IOutput $output, Closure $schemaClosure, array $options): void {
 	}
 }
 ';
 
-	protected Connection $connection;
-	protected IAppManager $appManager;
-
-	public function __construct(Connection $connection, IAppManager $appManager) {
-		$this->connection = $connection;
-		$this->appManager = $appManager;
-
+	public function __construct(
+		protected Connection $connection,
+		protected IAppManager $appManager,
+	) {
 		parent::__construct();
 	}
 
+	#[\Override]
 	protected function configure() {
 		$this
 			->setName('migrations:generate')
@@ -126,6 +96,7 @@ class {{classname}} extends SimpleMigrationStep {
 		parent::configure();
 	}
 
+	#[\Override]
 	public function execute(InputInterface $input, OutputInterface $output): int {
 		$appName = $input->getArgument('app');
 		$version = $input->getArgument('version');
@@ -147,7 +118,7 @@ class {{classname}} extends SimpleMigrationStep {
 
 		if ($fullVersion) {
 			[$major, $minor] = explode('.', $fullVersion);
-			$shouldVersion = (string) ((int)$major * 1000 + (int)$minor);
+			$shouldVersion = (string)((int)$major * 1000 + (int)$minor);
 			if ($version !== $shouldVersion) {
 				$output->writeln('<comment>Unexpected migration version for current version: ' . $fullVersion . '</comment>');
 				$output->writeln('<comment> - Pattern:  XYYY </comment>');
@@ -155,6 +126,7 @@ class {{classname}} extends SimpleMigrationStep {
 				$output->writeln('<comment> - Actual:   ' . $version . '</comment>');
 
 				if ($input->isInteractive()) {
+					/** @var QuestionHelper $helper */
 					$helper = $this->getHelper('question');
 					$question = new ConfirmationQuestion('Continue with your given version? (y/n) [n] ', false);
 
@@ -179,6 +151,7 @@ class {{classname}} extends SimpleMigrationStep {
 	 * @param CompletionContext $context
 	 * @return string[]
 	 */
+	#[\Override]
 	public function completeOptionValues($optionName, CompletionContext $context) {
 		return [];
 	}
@@ -188,10 +161,12 @@ class {{classname}} extends SimpleMigrationStep {
 	 * @param CompletionContext $context
 	 * @return string[]
 	 */
+	#[\Override]
 	public function completeArgumentValues($argumentName, CompletionContext $context) {
 		if ($argumentName === 'app') {
-			$allApps = \OC_App::getAllApps();
-			return array_diff($allApps, \OC_App::getEnabledApps(true, true));
+			$allApps = $this->appManager->getAllAppsInAppsFolders();
+			$enabledApps = $this->appManager->getEnabledApps();
+			return array_diff($allApps, $enabledApps);
 		}
 
 		if ($argumentName === 'version') {
@@ -215,7 +190,6 @@ class {{classname}} extends SimpleMigrationStep {
 			$schemaBody = "\t\t" . 'return null;';
 		}
 
-
 		$placeHolders = [
 			'{{namespace}}',
 			'{{classname}}',
@@ -228,7 +202,7 @@ class {{classname}} extends SimpleMigrationStep {
 			$schemaBody,
 			date('Y')
 		];
-		$code = str_replace($placeHolders, $replacements, self::$_templateSimple);
+		$code = str_replace($placeHolders, $replacements, self::TEMPLATE);
 		$dir = $ms->getMigrationsDirectory();
 
 		$this->ensureMigrationDirExists($dir);

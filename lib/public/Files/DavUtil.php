@@ -1,33 +1,8 @@
 <?php
+
 /**
- * @copyright Copyright (c) 2022 Côme Chilliet <come.chilliet@nextcloud.com>
- *
- * @author Arthur Schiwon <blizzz@owncloud.com>
- * @author Bart Visscher <bartv@thisnet.nl>
- * @author Jakob Sack <mail@jakobsack.de>
- * @author Jörn Friedrich Dreyer <jfd@butonic.de>
- * @author Klaas Freitag <freitag@owncloud.com>
- * @author Markus Goetz <markus@woboq.com>
- * @author Morris Jobke <hey@morrisjobke.de>
- * @author Robin Appelman <icewind@owncloud.com>
- * @author Thomas Müller <thomas.mueller@tmit.eu>
- * @author Vincent Petry <pvince81@owncloud.com>
- * @author Côme Chilliet <come.chilliet@nextcloud.com>
- *
- * @license AGPL-3.0
- *
- * This code is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License, version 3,
- * as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program. If not, see <http://www.gnu.org/licenses/>
- *
+ * SPDX-FileCopyrightText: 2022 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-only
  */
 
 namespace OCP\Files;
@@ -58,7 +33,7 @@ class DavUtil {
 	 *
 	 * @since 25.0.0
 	 */
-	public static function getDavPermissions(FileInfo $info): string {
+	public static function getDavPermissions(FileInfo $info, FileInfo $parent): string {
 		$permissions = $info->getPermissions();
 		$p = '';
 		if ($info->isShared()) {
@@ -76,8 +51,11 @@ class DavUtil {
 		if ($permissions & Constants::PERMISSION_DELETE) {
 			$p .= 'D';
 		}
+		if (self::canRename($info, $parent)) {
+			$p .= 'N'; // Renamable
+		}
 		if ($permissions & Constants::PERMISSION_UPDATE) {
-			$p .= 'NV'; // Renameable, Movable
+			$p .= 'V'; // Movable
 		}
 
 		// since we always add update permissions for the root of movable mounts
@@ -100,5 +78,28 @@ class DavUtil {
 			}
 		}
 		return $p;
+	}
+
+	/**
+	 * @since 34.0.0
+	 */
+	public static function canRename(FileInfo $info, FileInfo $parent): bool {
+		// the root of a movable mountpoint can be renamed regardless of the file permissions
+		if ($info->getMountPoint() instanceof IMovableMount && $info->getInternalPath() === '') {
+			return true;
+		}
+
+		// we allow renaming the file if either the file has update permissions
+		if ($info->isUpdateable()) {
+			return true;
+		}
+
+		// or the file can be deleted and the parent has create permissions
+		if ($info->getStorage() instanceof IHomeStorage && $info->getInternalPath() === 'files') {
+			// can't rename the users home
+			return false;
+		}
+
+		return $info->isDeletable() && $parent->isCreatable();
 	}
 }

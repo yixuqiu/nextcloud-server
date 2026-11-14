@@ -3,37 +3,20 @@
 declare(strict_types=1);
 
 /**
- * @copyright 2023 Christopher Ng <chrng8@gmail.com>
- *
- * @author Christopher Ng <chrng8@gmail.com>
- *
- * @license GNU AGPL version 3 or any later version
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
- *
+ * SPDX-FileCopyrightText: 2023 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
 namespace OCA\FilesReminders\BackgroundJob;
 
 use OCA\FilesReminders\Db\ReminderMapper;
 use OCA\FilesReminders\Service\ReminderService;
-use OCP\AppFramework\Db\DoesNotExistException;
 use OCP\AppFramework\Utility\ITimeFactory;
-use OCP\BackgroundJob\Job;
+use OCP\BackgroundJob\TimedJob;
 use Psr\Log\LoggerInterface;
+use Throwable;
 
-class ScheduledNotifications extends Job {
+class ScheduledNotifications extends TimedJob {
 	public function __construct(
 		ITimeFactory $time,
 		protected ReminderMapper $reminderMapper,
@@ -41,18 +24,24 @@ class ScheduledNotifications extends Job {
 		protected LoggerInterface $logger,
 	) {
 		parent::__construct($time);
+
+		$this->setInterval(60);
 	}
 
 	/**
 	 * @SuppressWarnings(PHPMD.UnusedFormalParameter)
 	 */
+	#[\Override]
 	public function run($argument) {
 		$reminders = $this->reminderMapper->findOverdue();
 		foreach ($reminders as $reminder) {
 			try {
 				$this->reminderService->send($reminder);
-			} catch (DoesNotExistException $e) {
-				$this->logger->debug('Could not send notification for reminder with id ' . $reminder->getId());
+			} catch (Throwable $e) {
+				// A single broken reminder (e.g. orphaned user record) must not
+				// stall the rest of the queue, which is ordered by due_date ASC
+				// and would otherwise re-hit the same row on every cron tick.
+				$this->logger->error('Could not send notification for reminder with id ' . $reminder->getId(), ['exception' => $e]);
 			}
 		}
 	}

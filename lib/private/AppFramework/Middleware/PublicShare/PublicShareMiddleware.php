@@ -1,60 +1,40 @@
 <?php
+
+declare(strict_types=1);
+
 /**
- * @copyright Copyright (c) 2016 Roeland Jago Douma <roeland@famdouma.nl>
- *
- * @author Christoph Wurst <christoph@winzerhof-wurst.at>
- * @author Roeland Jago Douma <roeland@famdouma.nl>
- *
- * @license GNU AGPL version 3 or any later version
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
- *
+ * SPDX-FileCopyrightText: 2016 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
+
 namespace OC\AppFramework\Middleware\PublicShare;
 
 use OC\AppFramework\Middleware\PublicShare\Exceptions\NeedAuthenticationException;
+use OCA\Files_Sharing\AppInfo\Application;
 use OCP\AppFramework\AuthPublicShareController;
-use OCP\AppFramework\Http\NotFoundResponse;
+use OCP\AppFramework\Controller;
+use OCP\AppFramework\Http;
+use OCP\AppFramework\Http\TemplateResponse;
 use OCP\AppFramework\Middleware;
 use OCP\AppFramework\PublicShareController;
 use OCP\Files\NotFoundException;
-use OCP\IConfig;
+use OCP\IAppConfig;
 use OCP\IRequest;
 use OCP\ISession;
 use OCP\Security\Bruteforce\IThrottler;
 
 class PublicShareMiddleware extends Middleware {
-	/** @var IRequest */
-	private $request;
 
-	/** @var ISession */
-	private $session;
-
-	/** @var IConfig */
-	private $config;
-
-	/** @var IThrottler */
-	private $throttler;
-
-	public function __construct(IRequest $request, ISession $session, IConfig $config, IThrottler $throttler) {
-		$this->request = $request;
-		$this->session = $session;
-		$this->config = $config;
-		$this->throttler = $throttler;
+	public function __construct(
+		private readonly IRequest $request,
+		private readonly ISession $session,
+		private readonly IAppConfig $appConfig,
+		private readonly IThrottler $throttler,
+	) {
 	}
 
-	public function beforeController($controller, $methodName) {
+	#[\Override]
+	public function beforeController(Controller $controller, string $methodName): void {
 		if (!($controller instanceof PublicShareController)) {
 			return;
 		}
@@ -104,13 +84,16 @@ class PublicShareMiddleware extends Middleware {
 		throw new NotFoundException();
 	}
 
-	public function afterException($controller, $methodName, \Exception $exception) {
+	#[\Override]
+	public function afterException(Controller $controller, string $methodName, \Exception $exception) {
 		if (!($controller instanceof PublicShareController)) {
 			throw $exception;
 		}
 
 		if ($exception instanceof NotFoundException) {
-			return new NotFoundResponse();
+			return new TemplateResponse(Application::APP_ID, 'sharenotfound', [
+				'message' => $exception->getMessage(),
+			], 'guest', Http::STATUS_NOT_FOUND);
 		}
 
 		if ($controller instanceof AuthPublicShareController && $exception instanceof NeedAuthenticationException) {
@@ -129,22 +112,14 @@ class PublicShareMiddleware extends Middleware {
 	 * Check if link sharing is allowed
 	 */
 	private function isLinkSharingEnabled(): bool {
-		// Check if the shareAPI is enabled
-		if ($this->config->getAppValue('core', 'shareapi_enabled', 'yes') !== 'yes') {
-			return false;
-		}
-
-		// Check whether public sharing is enabled
-		if ($this->config->getAppValue('core', 'shareapi_allow_links', 'yes') !== 'yes') {
-			return false;
-		}
-
-		return true;
+		// Check if the shareAPI and public sharing is enabled
+		return $this->appConfig->getValueBool('core', 'shareapi_enabled', true)
+			&& $this->appConfig->getValueBool('core', 'shareapi_allow_links', true);
 	}
 
-	private function throttle($bruteforceProtectionAction, $token): void {
+	private function throttle(string $bruteforceProtectionAction, string $token): void {
 		$ip = $this->request->getRemoteAddress();
-		$this->throttler->sleepDelay($ip, $bruteforceProtectionAction);
+		$this->throttler->sleepDelayOrThrowOnMax($ip, $bruteforceProtectionAction);
 		$this->throttler->registerAttempt($bruteforceProtectionAction, $ip, ['token' => $token]);
 	}
 }

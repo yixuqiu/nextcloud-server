@@ -3,28 +3,9 @@
 declare(strict_types=1);
 
 /**
- * @copyright Copyright (c) 2023 Julius Härtl <jus@bitgrid.net>
- * @copyright Copyright (c) 2023 Marcel Klehr <mklehr@gmx.net>
- *
- * @author Julius Härtl <jus@bitgrid.net>
- * @author Marcel Klehr <mklehr@gmx.net>
- *
- * @license GNU AGPL version 3 or any later version
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
+ * SPDX-FileCopyrightText: 2023 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
-
 
 namespace OC\SpeechToText;
 
@@ -35,14 +16,17 @@ use OCP\Files\File;
 use OCP\Files\InvalidPathException;
 use OCP\Files\NotFoundException;
 use OCP\IConfig;
-use OCP\IServerContainer;
 use OCP\IUserSession;
 use OCP\PreConditionNotMetException;
 use OCP\SpeechToText\ISpeechToTextManager;
 use OCP\SpeechToText\ISpeechToTextProvider;
 use OCP\SpeechToText\ISpeechToTextProviderWithId;
 use OCP\SpeechToText\ISpeechToTextProviderWithUserId;
+use OCP\TaskProcessing\IManager as ITaskProcessingManager;
+use OCP\TaskProcessing\Task;
+use OCP\TaskProcessing\TaskTypes\AudioToText;
 use Psr\Container\ContainerExceptionInterface;
+use Psr\Container\ContainerInterface;
 use Psr\Container\NotFoundExceptionInterface;
 use Psr\Log\LoggerInterface;
 use RuntimeException;
@@ -53,15 +37,17 @@ class SpeechToTextManager implements ISpeechToTextManager {
 	private ?array $providers = null;
 
 	public function __construct(
-		private IServerContainer $serverContainer,
+		private ContainerInterface $serverContainer,
 		private Coordinator $coordinator,
 		private LoggerInterface $logger,
 		private IJobList $jobList,
 		private IConfig $config,
 		private IUserSession $userSession,
+		private ITaskProcessingManager $taskProcessingManager,
 	) {
 	}
 
+	#[\Override]
 	public function getProviders(): array {
 		$context = $this->coordinator->getRegistrationContext();
 		if ($context === null) {
@@ -88,6 +74,7 @@ class SpeechToTextManager implements ISpeechToTextManager {
 		return $this->providers;
 	}
 
+	#[\Override]
 	public function hasProviders(): bool {
 		$context = $this->coordinator->getRegistrationContext();
 		if ($context === null) {
@@ -96,6 +83,7 @@ class SpeechToTextManager implements ISpeechToTextManager {
 		return !empty($context->getSpeechToTextProviders());
 	}
 
+	#[\Override]
 	public function scheduleFileTranscription(File $file, ?string $userId, string $appId): void {
 		if (!$this->hasProviders()) {
 			throw new PreConditionNotMetException('No SpeechToText providers have been registered');
@@ -112,6 +100,7 @@ class SpeechToTextManager implements ISpeechToTextManager {
 		}
 	}
 
+	#[\Override]
 	public function cancelScheduledFileTranscription(File $file, ?string $userId, string $appId): void {
 		try {
 			$jobArguments = [
@@ -130,7 +119,31 @@ class SpeechToTextManager implements ISpeechToTextManager {
 		}
 	}
 
-	public function transcribeFile(File $file): string {
+	#[\Override]
+	public function transcribeFile(File $file, ?string $userId = null, string $appId = 'core'): string {
+		// try to run a TaskProcessing core:audio2text task
+		// this covers scheduling as well because OC\SpeechToText\TranscriptionJob calls this method
+		try {
+			if (isset($this->taskProcessingManager->getAvailableTaskTypes()['core:audio2text'])) {
+				$taskProcessingTask = new Task(
+					AudioToText::ID,
+					['input' => $file->getId()],
+					$appId,
+					$userId,
+					'from-SpeechToTextManager||' . $file->getId() . '||' . ($userId ?? '') . '||' . $appId,
+				);
+				$resultTask = $this->taskProcessingManager->runTask($taskProcessingTask);
+				if ($resultTask->getStatus() === Task::STATUS_SUCCESSFUL) {
+					$output = $resultTask->getOutput();
+					if (isset($output['output']) && is_string($output['output'])) {
+						return $output['output'];
+					}
+				}
+			}
+		} catch (Throwable $e) {
+			throw new RuntimeException('Failed to run a Speech-to-text job from STTManager with TaskProcessing for file ' . $file->getId(), 0, $e);
+		}
+
 		if (!$this->hasProviders()) {
 			throw new PreConditionNotMetException('No SpeechToText providers have been registered');
 		}

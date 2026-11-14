@@ -1,59 +1,35 @@
 /**
- * @copyright Copyright (c) 2022 Julius Härtl <jus@bitgrid.net>
- *
- * @author Julius Härtl <jus@bitgrid.net>
- *
- * @license GNU AGPL version 3 or any later version
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
+ * SPDX-FileCopyrightText: 2022 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
-import Vue from 'vue'
-import { translate as t } from '@nextcloud/l10n'
+import type { App } from 'vue'
 
-import { registerWidget, registerCustomPickerElement, NcCustomPickerRenderResult } from '@nextcloud/vue/dist/Components/NcRichText.js'
-
-import FileWidget from './views/ReferenceFileWidget.vue'
+import { t } from '@nextcloud/l10n'
+import { createApp } from 'vue'
+import { NcCustomPickerRenderResult, registerCustomPickerElement, registerWidget } from '@nextcloud/vue/components/NcRichText'
 import FileReferencePickerElement from './views/FileReferencePickerElement.vue'
-
-Vue.mixin({
-	methods: {
-		t,
-	},
-})
+import FileWidget from './views/ReferenceFileWidget.vue'
 
 registerWidget('file', (el, { richObjectType, richObject, accessible, interactive }) => {
-	const Widget = Vue.extend(FileWidget)
-	new Widget({
-		propsData: {
-			richObjectType,
-			richObject,
-			accessible,
-			interactive,
-		},
-	}).$mount(el)
-}, () => {}, { hasInteractiveView: true })
+	const app = createApp(FileWidget, {
+		richObjectType,
+		richObject,
+		accessible,
+		interactive,
+	})
+	app.mixin({ methods: { t } })
+	app.mount(el)
+}, () => {}, { hasInteractiveView: true, isResizable: true })
 
 registerCustomPickerElement('files', (el, { providerId, accessible }) => {
-	const Element = Vue.extend(FileReferencePickerElement)
-	const vueElement = new Element({
-		propsData: {
-			providerId,
-			accessible,
-		},
-	}).$mount(el)
-	return new NcCustomPickerRenderResult(vueElement.$el, vueElement)
+	const app = createApp(FileReferencePickerElement, {
+		providerId,
+		accessible,
+	})
+	app.mixin({ methods: { t } })
+	app.mount(el)
+	return new NcCustomPickerRenderResult(el, app)
 }, (el, renderResult) => {
-	renderResult.object.$destroy()
+	(renderResult.object as App).unmount()
 })

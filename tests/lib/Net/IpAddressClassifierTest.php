@@ -2,42 +2,29 @@
 
 declare(strict_types=1);
 
-/*
- * @copyright 2022 Christoph Wurst <christoph@winzerhof-wurst.at>
- *
- * @author 2022 Christoph Wurst <christoph@winzerhof-wurst.at>
- *
- * @license GNU AGPL version 3 or any later version
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+/**
+ * SPDX-FileCopyrightText: 2022 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
 namespace lib\Net;
 
+use IPLib\Address\IPv4;
+use IPLib\Address\IPv6;
 use OC\Net\IpAddressClassifier;
 use Test\TestCase;
 
 class IpAddressClassifierTest extends TestCase {
 	private IpAddressClassifier $classifier;
 
+	#[\Override]
 	protected function setUp(): void {
 		parent::setUp();
 
 		$this->classifier = new IpAddressClassifier();
 	}
 
-	public function publicIpAddressData(): array {
+	public static function publicIpAddressData(): array {
 		return [
 			['8.8.8.8'],
 			['8.8.4.4'],
@@ -46,19 +33,20 @@ class IpAddressClassifierTest extends TestCase {
 		];
 	}
 
-	/**
-	 * @dataProvider publicIpAddressData
-	 */
+	#[\PHPUnit\Framework\Attributes\DataProvider('publicIpAddressData')]
 	public function testPublicAddress(string $ip): void {
 		$isLocal = $this->classifier->isLocalAddress($ip);
 
 		self::assertFalse($isLocal);
 	}
 
-	public function localIpAddressData(): array {
+	public static function localIpAddressData(): array {
 		return [
+			['127.0.0.1'],
+			['127.0.0.13'], // all 127.0.0.0/8 network is loopback address
 			['192.168.0.1'],
 			['fe80::200:5aee:feaa:20a2'],
+			['fe80::1fc4:15d8:78db:2319%enp4s0'], // v6 zone ID
 			['0:0:0:0:0:ffff:10.0.0.1'],
 			['0:0:0:0:0:ffff:127.0.0.0'],
 			['10.0.0.1'],
@@ -66,15 +54,41 @@ class IpAddressClassifierTest extends TestCase {
 			['::1'],
 			['100.100.100.200'],
 			['192.0.0.1'],
+			['64:ff9b::a9fe:a9fe'], // NAT64 of 169.254.169.254
+			['64:ff9b:1::a9fe:a9fe'], // rfc8215
+			['::ffff:127.0.0.1'],
+			['2130706433'],
+			['0177.0.0.1'],
+			['169.254.169.254'],
 		];
 	}
 
-	/**
-	 * @dataProvider localIpAddressData
-	 */
+	#[\PHPUnit\Framework\Attributes\DataProvider('localIpAddressData')]
 	public function testLocalAddress(string $ip): void {
 		$isLocal = $this->classifier->isLocalAddress($ip);
 
 		self::assertTrue($isLocal);
+	}
+
+	public static function mappedAddresses(): array {
+		return [
+			['64:ff9b::a9fe:a9fe', '169.254.169.254'],
+			['::ffff:7f00:1', '127.0.0.1'],
+			['::127.0.0.1', '127.0.0.1'],
+			['::7f00:1', '127.0.0.1'],
+			['2001:0000:4136:e378:8000:63bf:3fff:fdd2', '192.0.2.45'],
+			['2001:4860:4860::8888', null],
+		];
+	}
+
+	#[\PHPUnit\Framework\Attributes\DataProvider('mappedAddresses')]
+	public function testMappedAddresses(string $ipv6, ?string $ipv4): void {
+		$mapped = $this->classifier->getMappedIpv4(IPv6::parseString($ipv6));
+
+		if ($ipv4 === null) {
+			self::assertEquals(null, $mapped);
+		} else {
+			self::assertEquals(IPv4::parseString($ipv4), $mapped);
+		}
 	}
 }

@@ -1,25 +1,10 @@
 <?php
+
 /**
- * @copyright Copyright (c) 2023 Claus-Justus Heine
- *
- * @author Claus-Justus Heine <himself@claus-justus-heine.de>
- *
- * @license GNU AGPL version 3 or any later version
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
- *
+ * SPDX-FileCopyrightText: 2023 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
+
 namespace OCA\DAV\Connector\Sabre;
 
 use Sabre\DAV\Server;
@@ -44,7 +29,7 @@ class AppleQuirksPlugin extends ServerPlugin {
 	private const OSX_CONTACTS_AGENT = 'AddressBookCore';
 	*/
 
-	private const OSX_AGENT_PREFIX = 'macOS';
+	private const string OSX_AGENT_PREFIX = 'macOS';
 
 	/** @var bool */
 	private $isMacOSDavAgent = false;
@@ -56,6 +41,7 @@ class AppleQuirksPlugin extends ServerPlugin {
 	 *
 	 * @return void
 	 */
+	#[\Override]
 	public function initialize(Server $server) {
 		$server->on('beforeMethod:REPORT', [$this, 'beforeReport'], 0);
 		$server->on('report', [$this, 'report'], 0);
@@ -75,13 +61,13 @@ class AppleQuirksPlugin extends ServerPlugin {
 	 * This method handles HTTP REPORT requests.
 	 *
 	 * @param string $reportName
-	 * @param mixed  $report
-	 * @param mixed  $path
+	 * @param mixed $report
+	 * @param mixed $path
 	 *
 	 * @return bool
 	 */
 	public function report($reportName, $report, $path) {
-		if ($reportName == '{DAV:}principal-property-search' && $this->isMacOSDavAgent) {
+		if ($reportName === '{DAV:}principal-property-search' && $this->isMacOSDavAgent) {
 			/** @var \Sabre\DAVACL\Xml\Request\PrincipalPropertySearchReport $report */
 			$report->applyToPrincipalCollectionSet = true;
 		}

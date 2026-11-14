@@ -1,9 +1,15 @@
 <?php
 
-namespace Core\Controller;
+/**
+ * SPDX-FileCopyrightText: 2019 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
+namespace Tests\Core\Controller;
 
 use OC\Core\Controller\GuestAvatarController;
 use OCP\AppFramework\Http\FileDisplayResponse;
+use OCP\Files\File;
 use OCP\Files\SimpleFS\ISimpleFile;
 use OCP\IAvatar;
 use OCP\IAvatarManager;
@@ -35,7 +41,7 @@ class GuestAvatarControllerTest extends \Test\TestCase {
 	private $avatar;
 
 	/**
-	 * @var \OCP\Files\File|\PHPUnit\Framework\MockObject\MockObject
+	 * @var File|\PHPUnit\Framework\MockObject\MockObject
 	 */
 	private $file;
 
@@ -47,6 +53,7 @@ class GuestAvatarControllerTest extends \Test\TestCase {
 	/**
 	 * Sets up the test environment.
 	 */
+	#[\Override]
 	protected function setUp(): void {
 		parent::setUp();
 
@@ -68,7 +75,7 @@ class GuestAvatarControllerTest extends \Test\TestCase {
 	/**
 	 * Tests getAvatar returns the guest avatar.
 	 */
-	public function testGetAvatar() {
+	public function testGetAvatar(): void {
 		$this->avatarManager->expects($this->once())
 			->method('getGuestAvatar')
 			->with('Peter')

@@ -3,40 +3,30 @@
 declare(strict_types=1);
 
 /**
- * @copyright Copyright (c) 2023 Joas Schilling <coding@schilljs.com>
- *
- * @author Joas Schilling <coding@schilljs.com>
- *
- * @license GNU AGPL version 3 or any later version
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
- *
+ * SPDX-FileCopyrightText: 2023 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
+
 namespace OCP\User\Events;
 
+use OCP\AppFramework\Attribute\Dispatchable;
+use OCP\AppFramework\Attribute\Listenable;
 use OCP\EventDispatcher\Event;
+use OCP\EventDispatcher\IWebhookCompatibleEvent;
+use OCP\EventDispatcher\JsonSerializer;
 use OCP\IUser;
 
 /**
  * @since 28.0.0
  */
-class UserFirstTimeLoggedInEvent extends Event {
+#[Listenable(since: '28.0.0')]
+#[Dispatchable(since: '28.0.0')]
+class UserFirstTimeLoggedInEvent extends Event implements IWebhookCompatibleEvent {
 	/**
 	 * @since 28.0.0
 	 */
 	public function __construct(
-		private IUser $user,
+		private readonly IUser $user,
 	) {
 		parent::__construct();
 	}
@@ -46,5 +36,15 @@ class UserFirstTimeLoggedInEvent extends Event {
 	 */
 	public function getUser(): IUser {
 		return $this->user;
+	}
+
+	/**
+	 * @since 34.0.0
+	 */
+	#[\Override]
+	public function getWebhookSerializable(): array {
+		return [
+			'user' => JsonSerializer::serializeUser($this->user)
+		];
 	}
 }

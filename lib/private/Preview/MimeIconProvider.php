@@ -1,24 +1,10 @@
 <?php
+
 /**
- * @copyright Copyright (c) 2023 John Molakvoæ <skjnldsv@protonmail.com>
- *
- * @author John Molakvoæ <skjnldsv@protonmail.com>
- *
- * @license AGPL-3.0-or-later
- *
- * This code is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License, version 3,
- * as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program. If not, see <http://www.gnu.org/licenses/>
- *
+ * SPDX-FileCopyrightText: 2023 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
+
 namespace OC\Preview;
 
 use OCA\Theming\ThemingDefaults;
@@ -38,7 +24,8 @@ class MimeIconProvider implements IMimeIconProvider {
 	) {
 	}
 
-	public function getMimeIconUrl(string $mime): null|string {
+	#[\Override]
+	public function getMimeIconUrl(string $mime): ?string {
 		if (!$mime) {
 			return null;
 		}
@@ -70,8 +57,8 @@ class MimeIconProvider implements IMimeIconProvider {
 
 		return null;
 	}
-	
-	private function searchfileName(string $fileName): null|string {
+
+	private function searchfileName(string $fileName): ?string {
 		// If the file exists in the current enabled legacy
 		// custom theme, let's return it
 		$theme = $this->config->getSystemValue('theme', '');
@@ -81,7 +68,7 @@ class MimeIconProvider implements IMimeIconProvider {
 				return $this->urlGenerator->getAbsoluteURL($path);
 			}
 		}
-		
+
 		// Previously, we used to pass this through Theming
 		// But it was only used to colour icons containing
 		// 0082c9. Since with vue we moved to inline svg icons,

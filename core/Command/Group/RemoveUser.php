@@ -1,26 +1,10 @@
 <?php
+
 /**
- * @copyright Copyright (c) 2016 Robin Appelman <robin@icewind.nl>
- *
- * @author Joas Schilling <coding@schilljs.com>
- * @author Robin Appelman <robin@icewind.nl>
- *
- * @license GNU AGPL version 3 or any later version
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
- *
+ * SPDX-FileCopyrightText: 2016 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
+
 namespace OC\Core\Command\Group;
 
 use OC\Core\Command\Base;
@@ -41,6 +25,7 @@ class RemoveUser extends Base {
 		parent::__construct();
 	}
 
+	#[\Override]
 	protected function configure() {
 		$this
 			->setName('group:removeuser')
@@ -51,24 +36,45 @@ class RemoveUser extends Base {
 				'group to remove the user from'
 			)->addArgument(
 				'user',
-				InputArgument::REQUIRED,
-				'user to remove from the group'
+				InputArgument::REQUIRED + InputArgument::IS_ARRAY,
+				'users to remove from the group'
 			);
 	}
 
+	#[\Override]
 	protected function execute(InputInterface $input, OutputInterface $output): int {
 		$group = $this->groupManager->get($input->getArgument('group'));
 		if (is_null($group)) {
 			$output->writeln('<error>group not found</error>');
-			return 1;
+			return Base::FAILURE;
 		}
-		$user = $this->userManager->get($input->getArgument('user'));
-		if (is_null($user)) {
-			$output->writeln('<error>user not found</error>');
-			return 1;
+
+		$allUsersFound = true;
+		$noUserFound = true;
+		$users = (array)$input->getArgument('user');
+		foreach ($users as $userId) {
+			$user = $this->userManager->get($userId);
+			if (is_null($user)) {
+				$output->writeln('<error>user ' . $userId . ' not found</error>');
+				$allUsersFound = false;
+				continue;
+			}
+			$noUserFound = false;
+			$group->removeUser($user);
+			unset($user);
+			$output->writeln('<info>user ' . $userId . ' removed</info>');
 		}
-		$group->removeUser($user);
-		return 0;
+
+		if (!$allUsersFound && !$noUserFound) {
+			$output->writeln('<error>Some users were not found, all others where removed from the group.</error>');
+			return Base::FAILURE;
+		}
+
+		if ($noUserFound) {
+			return Base::FAILURE;
+		}
+
+		return Base::SUCCESS;
 	}
 
 	/**
@@ -76,6 +82,7 @@ class RemoveUser extends Base {
 	 * @param CompletionContext $context
 	 * @return string[]
 	 */
+	#[\Override]
 	public function completeArgumentValues($argumentName, CompletionContext $context) {
 		if ($argumentName === 'group') {
 			return array_map(static fn (IGroup $group) => $group->getGID(), $this->groupManager->search($context->getCurrentWord()));

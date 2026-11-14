@@ -1,29 +1,12 @@
 <?php
 
 declare(strict_types=1);
-
 /**
- * @copyright Copyright (c) 2016, ownCloud, Inc.
- *
- * @author Lukas Reschke <lukas@statuscode.ch>
- * @author Roeland Jago Douma <roeland@famdouma.nl>
- * @author Thomas Citharel <nextcloud@tcit.fr>
- *
- * @license AGPL-3.0
- *
- * This code is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License, version 3,
- * as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program. If not, see <http://www.gnu.org/licenses/>
- *
+ * SPDX-FileCopyrightText: 2016-2024 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-FileCopyrightText: 2016 ownCloud, Inc.
+ * SPDX-License-Identifier: AGPL-3.0-only
  */
+
 namespace OC\Security\CSP;
 
 /**
@@ -40,17 +23,6 @@ class ContentSecurityPolicy extends \OCP\AppFramework\Http\ContentSecurityPolicy
 
 	public function setInlineScriptAllowed(bool $inlineScriptAllowed): void {
 		$this->inlineScriptAllowed = $inlineScriptAllowed;
-	}
-
-	public function isEvalScriptAllowed(): bool {
-		return $this->evalScriptAllowed;
-	}
-
-	/**
-	 * @deprecated 17.0.0 Unsafe eval should not be used anymore.
-	 */
-	public function setEvalScriptAllowed(bool $evalScriptAllowed): void {
-		$this->evalScriptAllowed = $evalScriptAllowed;
 	}
 
 	public function isEvalWasmAllowed(): ?bool {
@@ -133,21 +105,6 @@ class ContentSecurityPolicy extends \OCP\AppFramework\Http\ContentSecurityPolicy
 		$this->allowedFontDomains = $allowedFontDomains;
 	}
 
-	/**
-	 * @deprecated 15.0.0 use FrameDomains and WorkerSrcDomains
-	 */
-	public function getAllowedChildSrcDomains(): array {
-		return $this->allowedChildSrcDomains;
-	}
-
-	/**
-	 * @param array $allowedChildSrcDomains
-	 * @deprecated 15.0.0 use FrameDomains and WorkerSrcDomains
-	 */
-	public function setAllowedChildSrcDomains($allowedChildSrcDomains): void {
-		$this->allowedChildSrcDomains = $allowedChildSrcDomains;
-	}
-
 	public function getAllowedFrameAncestors(): array {
 		return $this->allowedFrameAncestors;
 	}
@@ -174,7 +131,6 @@ class ContentSecurityPolicy extends \OCP\AppFramework\Http\ContentSecurityPolicy
 	public function setAllowedFormActionDomains(array $allowedFormActionDomains): void {
 		$this->allowedFormActionDomains = $allowedFormActionDomains;
 	}
-
 
 	public function getReportTo(): array {
 		return $this->reportTo;

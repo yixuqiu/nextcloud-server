@@ -3,25 +3,8 @@
 declare(strict_types=1);
 
 /**
- * @copyright 2024 Daniel Kesselberg <mail@danielkesselberg.de>
- *
- * @author Daniel Kesselberg <mail@danielkesselberg.de>
- *
- * @license GNU AGPL version 3 or any later version
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
- *
+ * SPDX-FileCopyrightText: 2024 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
 namespace OCA\DAV\Tests\unit\CalDAV;
@@ -29,11 +12,12 @@ namespace OCA\DAV\Tests\unit\CalDAV;
 use OCA\DAV\CalDAV\CachedSubscriptionImpl;
 use OCA\DAV\CalDAV\CachedSubscriptionProvider;
 use OCA\DAV\CalDAV\CalDavBackend;
+use PHPUnit\Framework\MockObject\MockObject;
 use Test\TestCase;
 
 class CachedSubscriptionProviderTest extends TestCase {
 
-	private CalDavBackend $backend;
+	private CalDavBackend&MockObject $backend;
 	private CachedSubscriptionProvider $provider;
 
 	protected function setUp(): void {
@@ -64,7 +48,7 @@ class CachedSubscriptionProviderTest extends TestCase {
 		$this->provider = new CachedSubscriptionProvider($this->backend);
 	}
 
-	public function testGetCalendars() {
+	public function testGetCalendars(): void {
 		$calendars = $this->provider->getCalendars(
 			'user-principal-123',
 			[]
@@ -75,7 +59,7 @@ class CachedSubscriptionProviderTest extends TestCase {
 		$this->assertInstanceOf(CachedSubscriptionImpl::class, $calendars[1]);
 	}
 
-	public function testGetCalendarsFilterByUri() {
+	public function testGetCalendarsFilterByUri(): void {
 		$calendars = $this->provider->getCalendars(
 			'user-principal-123',
 			['subscription-1']

@@ -1,9 +1,8 @@
 <?php
+
 /**
- * Copyright (c) 2014 Robin Appelman <icewind@owncloud.com>
- * This file is licensed under the Affero General Public License version 3 or
- * later.
- * See the COPYING-README file.
+ * SPDX-FileCopyrightText: 2023 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
 namespace lib\Files\Storage\Wrapper;
@@ -14,9 +13,7 @@ use PHPUnit\Framework\MockObject\MockObject;
 use Psr\Clock\ClockInterface;
 use Test\Files\Storage\Storage;
 
-/**
- * @group DB
- */
+#[\PHPUnit\Framework\Attributes\Group('DB')]
 class KnownMtimeTest extends Storage {
 	/** @var Temporary */
 	private $sourceStorage;
@@ -25,6 +22,7 @@ class KnownMtimeTest extends Storage {
 	private $clock;
 	private int $fakeTime = 0;
 
+	#[\Override]
 	protected function setUp(): void {
 		parent::setUp();
 		$this->fakeTime = 0;
@@ -40,6 +38,7 @@ class KnownMtimeTest extends Storage {
 		$this->instance = $this->getWrappedStorage();
 	}
 
+	#[\Override]
 	protected function tearDown(): void {
 		$this->sourceStorage->cleanUp();
 		parent::tearDown();
@@ -52,7 +51,7 @@ class KnownMtimeTest extends Storage {
 		]);
 	}
 
-	public function testNewerKnownMtime() {
+	public function testNewerKnownMtime(): void {
 		$future = time() + 1000;
 		$this->fakeTime = $future;
 

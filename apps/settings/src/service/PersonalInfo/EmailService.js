@@ -1,32 +1,14 @@
 /**
- * @copyright 2021, Christopher Ng <chrng8@gmail.com>
- *
- * @author Christopher Ng <chrng8@gmail.com>
- *
- * @license AGPL-3.0-or-later
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
- *
+ * SPDX-FileCopyrightText: 2021 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
-import axios from '@nextcloud/axios'
 import { getCurrentUser } from '@nextcloud/auth'
-import { generateOcsUrl } from '@nextcloud/router'
+import axios from '@nextcloud/axios'
 import { confirmPassword } from '@nextcloud/password-confirmation'
-import '@nextcloud/password-confirmation/dist/style.css'
-
-import { ACCOUNT_PROPERTY_ENUM, SCOPE_SUFFIX } from '../../constants/AccountPropertyConstants.js'
+import { generateOcsUrl } from '@nextcloud/router'
+import { ACCOUNT_PROPERTY_ENUM, SCOPE_SUFFIX } from '../../constants/AccountPropertyConstants.ts'
+import { ocsData } from '../../utils/handlers.ts'
 
 /**
  * Save the primary email of the user
@@ -34,7 +16,7 @@ import { ACCOUNT_PROPERTY_ENUM, SCOPE_SUFFIX } from '../../constants/AccountProp
  * @param {string} email the primary email
  * @return {object}
  */
-export const savePrimaryEmail = async (email) => {
+export async function savePrimaryEmail(email) {
 	const userId = getCurrentUser().uid
 	const url = generateOcsUrl('cloud/users/{userId}', { userId })
 
@@ -45,7 +27,7 @@ export const savePrimaryEmail = async (email) => {
 		value: email,
 	})
 
-	return res.data
+	return ocsData(res)
 }
 
 /**
@@ -56,7 +38,7 @@ export const savePrimaryEmail = async (email) => {
  * @param {string} email the additional email
  * @return {object}
  */
-export const saveAdditionalEmail = async (email) => {
+export async function saveAdditionalEmail(email) {
 	const userId = getCurrentUser().uid
 	const url = generateOcsUrl('cloud/users/{userId}', { userId })
 
@@ -67,7 +49,7 @@ export const saveAdditionalEmail = async (email) => {
 		value: email,
 	})
 
-	return res.data
+	return ocsData(res)
 }
 
 /**
@@ -76,7 +58,7 @@ export const saveAdditionalEmail = async (email) => {
  * @param {string} email the notification email
  * @return {object}
  */
-export const saveNotificationEmail = async (email) => {
+export async function saveNotificationEmail(email) {
 	const userId = getCurrentUser().uid
 	const url = generateOcsUrl('cloud/users/{userId}', { userId })
 
@@ -87,7 +69,7 @@ export const saveNotificationEmail = async (email) => {
 		value: email,
 	})
 
-	return res.data
+	return ocsData(res)
 }
 
 /**
@@ -96,7 +78,7 @@ export const saveNotificationEmail = async (email) => {
  * @param {string} email the additional email
  * @return {object}
  */
-export const removeAdditionalEmail = async (email) => {
+export async function removeAdditionalEmail(email) {
 	const userId = getCurrentUser().uid
 	const url = generateOcsUrl('cloud/users/{userId}/{collection}', { userId, collection: ACCOUNT_PROPERTY_ENUM.EMAIL_COLLECTION })
 
@@ -107,7 +89,7 @@ export const removeAdditionalEmail = async (email) => {
 		value: '',
 	})
 
-	return res.data
+	return ocsData(res)
 }
 
 /**
@@ -117,7 +99,7 @@ export const removeAdditionalEmail = async (email) => {
  * @param {string} newEmail the new additional email
  * @return {object}
  */
-export const updateAdditionalEmail = async (prevEmail, newEmail) => {
+export async function updateAdditionalEmail(prevEmail, newEmail) {
 	const userId = getCurrentUser().uid
 	const url = generateOcsUrl('cloud/users/{userId}/{collection}', { userId, collection: ACCOUNT_PROPERTY_ENUM.EMAIL_COLLECTION })
 
@@ -128,7 +110,7 @@ export const updateAdditionalEmail = async (prevEmail, newEmail) => {
 		value: newEmail,
 	})
 
-	return res.data
+	return ocsData(res)
 }
 
 /**
@@ -138,7 +120,7 @@ export const updateAdditionalEmail = async (prevEmail, newEmail) => {
  * @param {string} scope the federation scope
  * @return {object}
  */
-export const saveAdditionalEmailScope = async (email, scope) => {
+export async function saveAdditionalEmailScope(email, scope) {
 	const userId = getCurrentUser().uid
 	const url = generateOcsUrl('cloud/users/{userId}/{collectionScope}', { userId, collectionScope: `${ACCOUNT_PROPERTY_ENUM.EMAIL_COLLECTION}${SCOPE_SUFFIX}` })
 
@@ -149,5 +131,5 @@ export const saveAdditionalEmailScope = async (email, scope) => {
 		value: scope,
 	})
 
-	return res.data
+	return ocsData(res)
 }

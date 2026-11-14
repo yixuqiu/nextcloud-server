@@ -1,26 +1,11 @@
 <?php
+
 /**
- * @copyright Copyright (c) 2016, ownCloud, Inc.
- *
- * @author Christoph Wurst <christoph@winzerhof-wurst.at>
- * @author Lukas Reschke <lukas@statuscode.ch>
- * @author Thomas Müller <thomas.mueller@tmit.eu>
- *
- * @license AGPL-3.0
- *
- * This code is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License, version 3,
- * as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program. If not, see <http://www.gnu.org/licenses/>
- *
+ * SPDX-FileCopyrightText: 2016-2024 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-FileCopyrightText: 2016 ownCloud, Inc.
+ * SPDX-License-Identifier: AGPL-3.0-only
  */
+
 namespace OCA\DAV\Upload;
 
 use OCA\DAV\Connector\Sabre\Directory;
@@ -36,23 +21,20 @@ use Sabre\DAV\IFile;
  * @package OCA\DAV\Upload
  */
 class FutureFile implements \Sabre\DAV\IFile {
-	/** @var Directory */
-	private $root;
-	/** @var string */
-	private $name;
-
 	/**
 	 * @param Directory $root
 	 * @param string $name
 	 */
-	public function __construct(Directory $root, $name) {
-		$this->root = $root;
-		$this->name = $name;
+	public function __construct(
+		private Directory $root,
+		private $name,
+	) {
 	}
 
 	/**
 	 * @inheritdoc
 	 */
+	#[\Override]
 	public function put($data) {
 		throw new Forbidden('Permission denied to put into this file');
 	}
@@ -60,6 +42,7 @@ class FutureFile implements \Sabre\DAV\IFile {
 	/**
 	 * @inheritdoc
 	 */
+	#[\Override]
 	public function get() {
 		$nodes = $this->root->getChildren();
 		return AssemblyStream::wrap($nodes);
@@ -72,6 +55,7 @@ class FutureFile implements \Sabre\DAV\IFile {
 	/**
 	 * @inheritdoc
 	 */
+	#[\Override]
 	public function getContentType() {
 		return 'application/octet-stream';
 	}
@@ -79,6 +63,7 @@ class FutureFile implements \Sabre\DAV\IFile {
 	/**
 	 * @inheritdoc
 	 */
+	#[\Override]
 	public function getETag() {
 		return $this->root->getETag();
 	}
@@ -86,6 +71,7 @@ class FutureFile implements \Sabre\DAV\IFile {
 	/**
 	 * @inheritdoc
 	 */
+	#[\Override]
 	public function getSize() {
 		$children = $this->root->getChildren();
 		$sizes = array_map(function ($node) {
@@ -99,6 +85,7 @@ class FutureFile implements \Sabre\DAV\IFile {
 	/**
 	 * @inheritdoc
 	 */
+	#[\Override]
 	public function delete() {
 		$this->root->delete();
 	}
@@ -106,6 +93,7 @@ class FutureFile implements \Sabre\DAV\IFile {
 	/**
 	 * @inheritdoc
 	 */
+	#[\Override]
 	public function getName() {
 		return $this->name;
 	}
@@ -113,6 +101,7 @@ class FutureFile implements \Sabre\DAV\IFile {
 	/**
 	 * @inheritdoc
 	 */
+	#[\Override]
 	public function setName($name) {
 		throw new Forbidden('Permission denied to rename this file');
 	}
@@ -120,6 +109,7 @@ class FutureFile implements \Sabre\DAV\IFile {
 	/**
 	 * @inheritdoc
 	 */
+	#[\Override]
 	public function getLastModified() {
 		return $this->root->getLastModified();
 	}

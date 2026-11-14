@@ -3,28 +3,10 @@
 declare(strict_types=1);
 
 /**
- * @copyright 2020 Christoph Wurst <christoph@winzerhof-wurst.at>
- *
- * @author Christoph Wurst <christoph@winzerhof-wurst.at>
- * @author Joas Schilling <coding@schilljs.com>
- * @author John Molakvoæ <skjnldsv@protonmail.com>
- *
- * @license GNU AGPL version 3 or any later version
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
- *
+ * SPDX-FileCopyrightText: 2020 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
+
 namespace OC\Search;
 
 use OCP\Search\IFilter;
@@ -44,40 +26,48 @@ class SearchQuery implements ISearchQuery {
 		private int $limit = self::LIMIT_DEFAULT,
 		private int|string|null $cursor = null,
 		private string $route = '',
-		private	array $routeParameters = [],
+		private array $routeParameters = [],
 	) {
 	}
 
+	#[\Override]
 	public function getTerm(): string {
 		return $this->getFilter('term')?->get() ?? '';
 	}
 
+	#[\Override]
 	public function getFilter(string $name): ?IFilter {
 		return $this->filters->has($name)
 			? $this->filters->get($name)
 			: null;
 	}
 
+	#[\Override]
 	public function getFilters(): IFilterCollection {
 		return $this->filters;
 	}
 
+	#[\Override]
 	public function getSortOrder(): int {
 		return $this->sortOrder;
 	}
 
+	#[\Override]
 	public function getLimit(): int {
 		return $this->limit;
 	}
 
+	#[\Override]
 	public function getCursor(): int|string|null {
 		return $this->cursor;
 	}
 
+	#[\Override]
 	public function getRoute(): string {
 		return $this->route;
 	}
 
+	#[\Override]
 	public function getRouteParameters(): array {
 		return $this->routeParameters;
 	}

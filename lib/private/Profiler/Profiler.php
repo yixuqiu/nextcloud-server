@@ -3,25 +3,8 @@
 declare(strict_types = 1);
 
 /**
- * @copyright 2021 Carl Schwan <carl@carlschwan.eu>
- *
- * @author Carl Schwan <carl@carlschwan.eu>
- *
- * @license GNU AGPL version 3 or any later version
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
- *
+ * SPDX-FileCopyrightText: 2021 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
 namespace OC\Profiler;
@@ -48,10 +31,12 @@ class Profiler implements IProfiler {
 		}
 	}
 
+	#[\Override]
 	public function add(IDataCollector $dataCollector): void {
 		$this->dataCollectors[$dataCollector->getName()] = $dataCollector;
 	}
 
+	#[\Override]
 	public function loadProfileFromResponse(Response $response): ?IProfile {
 		if (!$token = $response->getHeaders()['X-Debug-Token']) {
 			return null;
@@ -60,6 +45,7 @@ class Profiler implements IProfiler {
 		return $this->loadProfile($token);
 	}
 
+	#[\Override]
 	public function loadProfile(string $token): ?IProfile {
 		if ($this->storage) {
 			return $this->storage->read($token);
@@ -68,6 +54,7 @@ class Profiler implements IProfiler {
 		}
 	}
 
+	#[\Override]
 	public function saveProfile(IProfile $profile): bool {
 		if ($this->storage) {
 			return $this->storage->write($profile);
@@ -76,6 +63,7 @@ class Profiler implements IProfiler {
 		}
 	}
 
+	#[\Override]
 	public function collect(Request $request, Response $response): IProfile {
 		$profile = new Profile($request->getId());
 		$profile->setTime(time());
@@ -94,6 +82,7 @@ class Profiler implements IProfiler {
 	/**
 	 * @return array[]
 	 */
+	#[\Override]
 	public function find(?string $url, ?int $limit, ?string $method, ?int $start, ?int $end,
 		?string $statusCode = null): array {
 		if ($this->storage) {
@@ -103,18 +92,22 @@ class Profiler implements IProfiler {
 		}
 	}
 
+	#[\Override]
 	public function dataProviders(): array {
 		return array_keys($this->dataCollectors);
 	}
 
+	#[\Override]
 	public function isEnabled(): bool {
 		return $this->enabled;
 	}
 
+	#[\Override]
 	public function setEnabled(bool $enabled): void {
 		$this->enabled = $enabled;
 	}
 
+	#[\Override]
 	public function clear(): void {
 		$this->storage->purge();
 	}

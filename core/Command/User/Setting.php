@@ -1,31 +1,17 @@
 <?php
+
 /**
- * @copyright Copyright (c) 2016, ownCloud, Inc.
- *
- * @author Christoph Wurst <christoph@winzerhof-wurst.at>
- * @author Joas Schilling <coding@schilljs.com>
- * @author Johannes Leuker <j.leuker@hosting.de>
- * @author Kim Brose <kim.brose@rwth-aachen.de>
- * @author Roeland Jago Douma <roeland@famdouma.nl>
- *
- * @license AGPL-3.0
- *
- * This code is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License, version 3,
- * as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program. If not, see <http://www.gnu.org/licenses/>
- *
+ * SPDX-FileCopyrightText: 2016-2024 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-FileCopyrightText: 2016 ownCloud, Inc.
+ * SPDX-License-Identifier: AGPL-3.0-only
  */
+
 namespace OC\Core\Command\User;
 
 use OC\Core\Command\Base;
+use OCP\Config\BeforePreferenceDeletedEvent;
+use OCP\Config\BeforePreferenceSetEvent;
+use OCP\EventDispatcher\IEventDispatcher;
 use OCP\IConfig;
 use OCP\IUser;
 use OCP\IUserManager;
@@ -39,10 +25,12 @@ class Setting extends Base {
 	public function __construct(
 		protected IUserManager $userManager,
 		protected IConfig $config,
+		protected IEventDispatcher $eventDispatcher,
 	) {
 		parent::__construct();
 	}
 
+	#[\Override]
 	protected function configure() {
 		parent::configure();
 		$this
@@ -107,6 +95,12 @@ class Setting extends Base {
 				InputOption::VALUE_NONE,
 				'Checks whether the setting exists before deleting it'
 			)
+			->addOption(
+				'force',
+				null,
+				InputOption::VALUE_NONE,
+				'Set or delete the setting even if the app rejects it'
+			)
 		;
 	}
 
@@ -147,8 +141,12 @@ class Setting extends Base {
 		if ($input->getOption('error-if-not-exists') && !$input->getOption('delete')) {
 			throw new \InvalidArgumentException('The "error-if-not-exists" option can only be used together with "delete".');
 		}
+		if ($input->getOption('force') && !$input->getOption('delete') && $input->getArgument('value') === null) {
+			throw new \InvalidArgumentException('The "force" option can only be used together with "value" or "delete".');
+		}
 	}
 
+	#[\Override]
 	protected function execute(InputInterface $input, OutputInterface $output): int {
 		try {
 			$this->checkInput($input);
@@ -169,25 +167,38 @@ class Setting extends Base {
 					return 1;
 				}
 
-				if ($app === 'settings' && in_array($key, ['email', 'display_name'])) {
+				$event = new BeforePreferenceSetEvent($uid, $app, $key, $input->getArgument('value'));
+				$this->eventDispatcher->dispatchTyped($event);
+				if ($event->isRejected()) {
+					if (!$input->hasParameterOption('--force')) {
+						$output->writeln('<error>The value was rejected for setting "' . $key . '" of app "' . $app . '", use --force to set it anyway.</error>');
+						return 1;
+					}
+					$output->writeln('<comment>The value was rejected for setting "' . $key . '" of app "' . $app . '", setting it anyway.</comment>');
+				}
+
+				if ($app === 'settings' && in_array($key, ['email', 'display_name'], true)) {
 					$user = $this->userManager->get($uid);
 					if ($user instanceof IUser) {
 						if ($key === 'email') {
-							$user->setEMailAddress($input->getArgument('value'));
-						} elseif ($key === 'display_name') {
-							if (!$user->setDisplayName($input->getArgument('value'))) {
-								if ($user->getDisplayName() === $input->getArgument('value')) {
-									$output->writeln('<error>New and old display name are the same</error>');
-								} elseif ($input->getArgument('value') === '') {
-									$output->writeln('<error>New display name can\'t be empty</error>');
-								} else {
-									$output->writeln('<error>Could not set display name</error>');
-								}
-								return 1;
-							}
+							$email = $input->getArgument('value');
+							$user->setSystemEMailAddress(mb_strtolower(trim($email)));
+							return 0;
 						}
-						// setEmailAddress and setDisplayName both internally set the value
-						return 0;
+
+						// key === 'display_name'
+						if ($user->setDisplayName($input->getArgument('value'))) {
+							return 0;
+						}
+
+						if ($user->getDisplayName() === $input->getArgument('value')) {
+							$output->writeln('<error>New and old display name are the same</error>');
+						} elseif ($input->getArgument('value') === '') {
+							$output->writeln('<error>New display name can\'t be empty</error>');
+						} else {
+							$output->writeln('<error>Could not set display name</error>');
+						}
+						return 1;
 					}
 				}
 
@@ -199,14 +210,24 @@ class Setting extends Base {
 					return 1;
 				}
 
-				if ($app === 'settings' && in_array($key, ['email', 'display_name'])) {
+				$event = new BeforePreferenceDeletedEvent($uid, $app, $key);
+				$this->eventDispatcher->dispatchTyped($event);
+				if ($event->isRejected()) {
+					if (!$input->hasParameterOption('--force')) {
+						$output->writeln('<error>Deleting setting "' . $key . '" of app "' . $app . '" was rejected, use --force to delete it anyway.</error>');
+						return 1;
+					}
+					$output->writeln('<comment>Deleting setting "' . $key . '" of app "' . $app . '" was rejected, deleting it anyway.</comment>');
+				}
+
+				if ($app === 'settings' && in_array($key, ['email', 'display_name'], true)) {
 					$user = $this->userManager->get($uid);
 					if ($user instanceof IUser) {
 						if ($key === 'email') {
 							$user->setEMailAddress('');
 							// setEmailAddress already deletes the value
 							return 0;
-						} elseif ($key === 'display_name') {
+						} else {
 							$output->writeln('<error>Display name can\'t be deleted.</error>');
 							return 1;
 						}
@@ -237,7 +258,7 @@ class Setting extends Base {
 		}
 	}
 
-	protected function getUserSettings($uid, $app) {
+	protected function getUserSettings(string $uid, string $app): array {
 		$settings = $this->config->getAllUserValues($uid);
 		if ($app !== '') {
 			if (isset($settings[$app])) {
@@ -248,7 +269,10 @@ class Setting extends Base {
 		}
 
 		$user = $this->userManager->get($uid);
-		$settings['settings']['display_name'] = $user->getDisplayName();
+		if ($user !== null) {
+			// Only add the display name if the user exists
+			$settings['settings']['display_name'] = $user->getDisplayName();
+		}
 
 		return $settings;
 	}
@@ -258,6 +282,7 @@ class Setting extends Base {
 	 * @param CompletionContext $context
 	 * @return string[]
 	 */
+	#[\Override]
 	public function completeArgumentValues($argumentName, CompletionContext $context) {
 		if ($argumentName === 'uid') {
 			return array_map(static fn (IUser $user) => $user->getUID(), $this->userManager->search($context->getCurrentWord()));

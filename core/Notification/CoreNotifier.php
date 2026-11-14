@@ -3,37 +3,20 @@
 declare(strict_types=1);
 
 /**
- * @copyright Copyright (c) 2019, Roeland Jago Douma <roeland@famdouma.nl>
- *
- * @author Christoph Wurst <christoph@winzerhof-wurst.at>
- * @author Joas Schilling <coding@schilljs.com>
- * @author Morris Jobke <hey@morrisjobke.de>
- * @author Roeland Jago Douma <roeland@famdouma.nl>
- *
- * @license GNU AGPL version 3 or any later version
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
- *
+ * SPDX-FileCopyrightText: 2019 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
+
 namespace OC\Core\Notification;
 
+use OC\Core\BackgroundJobs\CheckCodeIntegrityJob;
 use OCP\IConfig;
 use OCP\IURLGenerator;
 use OCP\L10N\IFactory;
 use OCP\Notification\IAction;
 use OCP\Notification\INotification;
 use OCP\Notification\INotifier;
+use OCP\Notification\UnknownNotificationException;
 
 class CoreNotifier implements INotifier {
 	public function __construct(
@@ -49,6 +32,7 @@ class CoreNotifier implements INotifier {
 	 * @return string
 	 * @since 17.0.0
 	 */
+	#[\Override]
 	public function getID(): string {
 		return 'core';
 	}
@@ -59,13 +43,15 @@ class CoreNotifier implements INotifier {
 	 * @return string
 	 * @since 17.0.0
 	 */
+	#[\Override]
 	public function getName(): string {
 		return $this->factory->get('core')->t('Nextcloud Server');
 	}
 
+	#[\Override]
 	public function prepare(INotification $notification, string $languageCode): INotification {
 		if ($notification->getApp() !== 'core') {
-			throw new \InvalidArgumentException();
+			throw new UnknownNotificationException();
 		}
 		$l = $this->factory->get('core', $languageCode);
 
@@ -91,6 +77,16 @@ class CoreNotifier implements INotifier {
 			return $notification;
 		}
 
-		throw new \InvalidArgumentException('Invalid subject');
+		if ($notification->getSubject() === 'code_integrity_changed') {
+			$sentences = CheckCodeIntegrityJob::formatSummary($l, $notification->getSubjectParameters());
+			$sentences[] = $l->t('Review the results in the administration overview.');
+			$notification->setParsedSubject($l->t('The code integrity check result has changed'));
+			$notification->setParsedMessage(implode("\n", $sentences));
+			$notification->setLink($this->url->linkToRouteAbsolute('settings.AdminSettings.index', ['section' => 'overview']));
+			$notification->setIcon($this->url->getAbsoluteURL($this->url->imagePath('core', 'actions/error.svg')));
+			return $notification;
+		}
+
+		throw new UnknownNotificationException('Invalid subject');
 	}
 }

@@ -1,42 +1,20 @@
 <?php
+
+declare(strict_types=1);
+
 /**
- * @copyright Copyright (c) 2018 John Molakvoæ <skjnldsv@protonmail.com>
- *
- * @author Christoph Wurst <christoph@winzerhof-wurst.at>
- * @author John Molakvoæ <skjnldsv@protonmail.com>
- *
- * @license GNU AGPL version 3 or any later version
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
- *
+ * SPDX-FileCopyrightText: 2018 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
+
 namespace OCA\Theming\Settings;
 
+use OCA\Theming\AppInfo\Application;
 use OCP\IL10N;
 use OCP\IURLGenerator;
 use OCP\Settings\IIconSection;
 
 class PersonalSection implements IIconSection {
-
-	/** @var string */
-	protected $appName;
-
-	/** @var IURLGenerator */
-	private $urlGenerator;
-
-	/** @var IL10N */
-	private $l;
 
 	/**
 	 * Personal Section constructor.
@@ -45,12 +23,10 @@ class PersonalSection implements IIconSection {
 	 * @param IURLGenerator $urlGenerator
 	 * @param IL10N $l
 	 */
-	public function __construct(string $appName,
-		IURLGenerator $urlGenerator,
-		IL10N $l) {
-		$this->appName = $appName;
-		$this->urlGenerator = $urlGenerator;
-		$this->l = $l;
+	public function __construct(
+		private IURLGenerator $urlGenerator,
+		private IL10N $l,
+	) {
 	}
 
 	/**
@@ -60,8 +36,9 @@ class PersonalSection implements IIconSection {
 	 * @returns string
 	 * @since 13.0.0
 	 */
+	#[\Override]
 	public function getIcon() {
-		return $this->urlGenerator->imagePath($this->appName, 'accessibility-dark.svg');
+		return $this->urlGenerator->imagePath(Application::APP_ID, 'accessibility-dark.svg');
 	}
 
 	/**
@@ -71,8 +48,9 @@ class PersonalSection implements IIconSection {
 	 * @returns string
 	 * @since 9.1
 	 */
+	#[\Override]
 	public function getID() {
-		return $this->appName;
+		return Application::APP_ID;
 	}
 
 	/**
@@ -82,18 +60,20 @@ class PersonalSection implements IIconSection {
 	 * @return string
 	 * @since 9.1
 	 */
+	#[\Override]
 	public function getName() {
 		return $this->l->t('Appearance and accessibility');
 	}
 
 	/**
 	 * @return int whether the form should be rather on the top or bottom of
-	 * the settings navigation. The sections are arranged in ascending order of
-	 * the priority values. It is required to return a value between 0 and 99.
+	 *             the settings navigation. The sections are arranged in ascending order of
+	 *             the priority values. It is required to return a value between 0 and 99.
 	 *
 	 * E.g.: 70
 	 * @since 9.1
 	 */
+	#[\Override]
 	public function getPriority() {
 		return 15;
 	}

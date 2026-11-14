@@ -3,30 +3,14 @@
 declare(strict_types=1);
 
 /**
- * @copyright 2021 Christopher Ng <chrng8@gmail.com>
- *
- * @author Christopher Ng <chrng8@gmail.com>
- *
- * @license GNU AGPL version 3 or any later version
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
- *
+ * SPDX-FileCopyrightText: 2021 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
 namespace OC\Profile\Actions;
 
 use OCP\Accounts\IAccountManager;
+use OCP\Accounts\PropertyDoesNotExistException;
 use OCP\IURLGenerator;
 use OCP\IUser;
 use OCP\L10N\IFactory;
@@ -43,42 +27,62 @@ class FediverseAction implements ILinkAction {
 	) {
 	}
 
+	#[\Override]
 	public function preload(IUser $targetUser): void {
-		$account = $this->accountManager->getAccount($targetUser);
-		$this->value = $account->getProperty(IAccountManager::PROPERTY_FEDIVERSE)->getValue();
+		try {
+			$account = $this->accountManager->getAccount($targetUser);
+			$this->value = $account->getProperty(IAccountManager::PROPERTY_FEDIVERSE)->getValue();
+		} catch (PropertyDoesNotExistException) {
+			// `getTarget` will return null to skip this action
+			$this->value = '';
+		}
 	}
 
+	#[\Override]
 	public function getAppId(): string {
 		return 'core';
 	}
 
+	#[\Override]
 	public function getId(): string {
 		return IAccountManager::PROPERTY_FEDIVERSE;
 	}
 
+	#[\Override]
 	public function getDisplayId(): string {
 		return $this->l10nFactory->get('lib')->t('Fediverse');
 	}
 
+	#[\Override]
 	public function getTitle(): string {
 		$displayUsername = $this->value[0] === '@' ? $this->value : '@' . $this->value;
 		return $this->l10nFactory->get('lib')->t('View %s on the fediverse', [$displayUsername]);
 	}
 
+	#[\Override]
 	public function getPriority(): int {
 		return 50;
 	}
 
+	#[\Override]
 	public function getIcon(): string {
 		return $this->urlGenerator->getAbsoluteURL($this->urlGenerator->imagePath('core', 'actions/mastodon.svg'));
 	}
 
+	#[\Override]
 	public function getTarget(): ?string {
-		if (empty($this->value)) {
+		if ($this->value === '') {
 			return null;
 		}
-		$username = $this->value[0] === '@' ? substr($this->value, 1) : $this->value;
-		[$username, $instance] = explode('@', $username);
+
+		$handle = $this->value[0] === '@' ? substr($this->value, 1) : $this->value;
+		[$username, $instance] = [...explode('@', $handle, 2), ''];
+
+		if (($username === '') || ($instance === '')) {
+			return null;
+		} elseif (str_contains($username, '/') || str_contains($instance, '/')) {
+			return null;
+		}
 		return 'https://' . $instance . '/@' . $username;
 	}
 }

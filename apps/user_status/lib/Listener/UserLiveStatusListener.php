@@ -3,26 +3,10 @@
 declare(strict_types=1);
 
 /**
- * @copyright Copyright (c) 2020, Georg Ehrke
- *
- * @author Georg Ehrke <oc.list@georgehrke.com>
- *
- * @license GNU AGPL version 3 or any later version
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
- *
+ * SPDX-FileCopyrightText: 2020 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
+
 namespace OCA\UserStatus\Listener;
 
 use OCA\DAV\CalDAV\Status\StatusService as CalendarStatusService;
@@ -46,23 +30,19 @@ use Psr\Log\LoggerInterface;
  * @template-implements IEventListener<UserLiveStatusEvent>
  */
 class UserLiveStatusListener implements IEventListener {
-	private UserStatusMapper $mapper;
-	private StatusService $statusService;
-	private ITimeFactory $timeFactory;
-
-	public function __construct(UserStatusMapper $mapper,
-		StatusService $statusService,
-		ITimeFactory $timeFactory,
+	public function __construct(
+		private UserStatusMapper $mapper,
+		private StatusService $statusService,
+		private ITimeFactory $timeFactory,
 		private CalendarStatusService $calendarStatusService,
-		private LoggerInterface $logger) {
-		$this->mapper = $mapper;
-		$this->statusService = $statusService;
-		$this->timeFactory = $timeFactory;
+		private LoggerInterface $logger,
+	) {
 	}
 
 	/**
 	 * @inheritDoc
 	 */
+	#[\Override]
 	public function handle(Event $event): void {
 		if (!($event instanceof UserLiveStatusEvent)) {
 			// Unrelated
@@ -83,28 +63,26 @@ class UserLiveStatusListener implements IEventListener {
 
 		// If the status is user-defined and one of the persistent status, we
 		// will not override it.
-		if ($userStatus->getIsUserDefined() &&
-			\in_array($userStatus->getStatus(), StatusService::PERSISTENT_STATUSES, true)) {
+		if ($userStatus->getIsUserDefined()
+			&& \in_array($userStatus->getStatus(), StatusService::PERSISTENT_STATUSES, true)) {
 			return;
 		}
 
 		// Don't overwrite the "away" calendar status if it's set
-		if($userStatus->getMessageId() === IUserStatus::MESSAGE_CALENDAR_BUSY) {
+		if ($userStatus->getMessageId() === IUserStatus::MESSAGE_CALENDAR_BUSY) {
 			$event->setUserStatus(new ConnectorUserStatus($userStatus));
 			return;
 		}
 
 		$needsUpdate = false;
 
-		// If the current status is older than 5 minutes,
-		// treat it as outdated and update
-		if ($userStatus->getStatusTimestamp() < ($this->timeFactory->getTime() - StatusService::INVALIDATE_STATUS_THRESHOLD)) {
+		if ($userStatus->getStatusTimestamp() < ($this->timeFactory->getTime() - StatusService::REFRESH_STATUS_THRESHOLD)) {
 			$needsUpdate = true;
 		}
 
 		// If the emitted status is more important than the current status
 		// treat it as outdated and update
-		if (array_search($event->getStatus(), StatusService::PRIORITY_ORDERED_STATUSES) < array_search($userStatus->getStatus(), StatusService::PRIORITY_ORDERED_STATUSES)) {
+		if (array_search($event->getStatus(), StatusService::PRIORITY_ORDERED_STATUSES, true) < array_search($userStatus->getStatus(), StatusService::PRIORITY_ORDERED_STATUSES, true)) {
 			$needsUpdate = true;
 		}
 

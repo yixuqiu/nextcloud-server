@@ -3,27 +3,10 @@
 declare(strict_types=1);
 
 /**
- * @copyright Copyright (c) 2020 Julius Härtl <jus@bitgrid.net>
- *
- * @author Joas Schilling <coding@schilljs.com>
- * @author Julius Härtl <jus@bitgrid.net>
- *
- * @license GNU AGPL version 3 or any later version
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
- *
+ * SPDX-FileCopyrightText: 2020 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
+
 namespace OC\Dashboard;
 
 use InvalidArgumentException;
@@ -31,6 +14,7 @@ use OCP\App\IAppManager;
 use OCP\Dashboard\IConditionalWidget;
 use OCP\Dashboard\IManager;
 use OCP\Dashboard\IWidget;
+use OCP\Server;
 use Psr\Container\ContainerExceptionInterface;
 use Psr\Container\ContainerInterface;
 use Psr\Log\LoggerInterface;
@@ -43,11 +27,12 @@ class Manager implements IManager {
 	/** @var array<string, IWidget> */
 	private array $widgets = [];
 
-	private ContainerInterface $serverContainer;
 	private ?IAppManager $appManager = null;
 
-	public function __construct(ContainerInterface $serverContainer) {
-		$this->serverContainer = $serverContainer;
+	public function __construct(
+		private ContainerInterface $serverContainer,
+		private LoggerInterface $logger,
+	) {
 	}
 
 	private function registerWidget(IWidget $widget): void {
@@ -55,9 +40,14 @@ class Manager implements IManager {
 			throw new InvalidArgumentException('Dashboard widget with this id has already been registered');
 		}
 
+		if (!preg_match('/^[a-z][a-z0-9\-_]*$/', $widget->getId())) {
+			$this->logger->debug('Deprecated dashboard widget ID provided: "' . $widget->getId() . '" [ ' . get_class($widget) . ' ]. Please use a-z, 0-9, - and _ only, starting with a-z');
+		}
+
 		$this->widgets[$widget->getId()] = $widget;
 	}
 
+	#[\Override]
 	public function lazyRegisterWidget(string $widgetClass, string $appId): void {
 		$this->lazyWidgets[] = ['class' => $widgetClass, 'appId' => $appId];
 	}
@@ -81,7 +71,7 @@ class Manager implements IManager {
 				 * There is a circular dependency between the logger and the registry, so
 				 * we can not inject it. Thus the static call.
 				 */
-				\OC::$server->get(LoggerInterface::class)->critical(
+				Server::get(LoggerInterface::class)->critical(
 					'Could not load lazy dashboard widget: ' . $service['class'],
 					['exception' => $e]
 				);
@@ -102,7 +92,7 @@ class Manager implements IManager {
 				 * There is a circular dependency between the logger and the registry, so
 				 * we can not inject it. Thus the static call.
 				 */
-				\OC::$server->get(LoggerInterface::class)->critical(
+				Server::get(LoggerInterface::class)->critical(
 					'Could not register lazy dashboard widget: ' . $service['class'],
 					['exception' => $e]
 				);
@@ -115,7 +105,7 @@ class Manager implements IManager {
 				$endTime = microtime(true);
 				$duration = $endTime - $startTime;
 				if ($duration > 1) {
-					\OC::$server->get(LoggerInterface::class)->info(
+					Server::get(LoggerInterface::class)->info(
 						'Dashboard widget {widget} took {duration} seconds to load.',
 						[
 							'widget' => $widget->getId(),
@@ -124,7 +114,7 @@ class Manager implements IManager {
 					);
 				}
 			} catch (Throwable $e) {
-				\OC::$server->get(LoggerInterface::class)->critical(
+				Server::get(LoggerInterface::class)->critical(
 					'Error during dashboard widget loading: ' . $service['class'],
 					['exception' => $e]
 				);
@@ -137,6 +127,7 @@ class Manager implements IManager {
 	/**
 	 * @return array<string, IWidget>
 	 */
+	#[\Override]
 	public function getWidgets(): array {
 		$this->loadLazyPanels();
 		return $this->widgets;

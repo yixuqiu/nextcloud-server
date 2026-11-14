@@ -1,23 +1,7 @@
 <!--
-  - @copyright Copyright (c) 2022 Julius Härtl <jus@bitgrid.net>
-  -
-  - @author Julius Härtl <jus@bitgrid.net>
-  -
-  - @license GNU AGPL version 3 or any later version
-  -
-  - This program is free software: you can redistribute it and/or modify
-  - it under the terms of the GNU Affero General Public License as
-  - published by the Free Software Foundation, either version 3 of the
-  - License, or (at your option) any later version.
-  -
-  - This program is distributed in the hope that it will be useful,
-  - but WITHOUT ANY WARRANTY; without even the implied warranty of
-  - MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-  - GNU Affero General Public License for more details.
-  -
-  - You should have received a copy of the GNU Affero General Public License
-  - along with this program. If not, see <http://www.gnu.org/licenses/>.
-  -->
+  - SPDX-FileCopyrightText: 2022 Nextcloud GmbH and Nextcloud contributors
+  - SPDX-License-Identifier: AGPL-3.0-or-later
+-->
 
 <template>
 	<div v-if="!accessible" class="widget-file widget-file--no-access">
@@ -35,29 +19,28 @@
 		</span>
 	</div>
 
-	<!-- Live preview if a handler is available -->
-	<component :is="viewerHandler.component"
-		v-else-if="interactive && viewerHandler && !failedViewer"
-		:active="false /* prevent video from autoplaying */"
-		:can-swipe="false"
-		:can-zoom="false"
-		:is-embedded="true"
-		v-bind="viewerFile"
-		:file-list="[viewerFile]"
-		:is-full-screen="false"
-		:is-sidebar-shown="false"
+	<!-- Live preview where the viewer can show the file, read-only, with a menu
+	     to open it in the viewer. <nc-viewer-file> is a custom element, not a Vue
+	     component: as a plain tag, Vue would try to resolve it and warn, as our
+	     build has no `isCustomElement` for it. `:is` with a string renders the
+	     element without, and `.prop` hands it the file as a DOM property -->
+	<component
+		:is="viewerFileTag"
+		v-else-if="interactive && viewable && !failedViewer"
+		:file.prop="node"
 		class="widget-file widget-file--interactive"
-		@error="failedViewer = true" />
+		@errored="failedViewer = true" />
 
 	<!-- The file is accessible -->
-	<a v-else
+	<a
+		v-else
 		class="widget-file widget-file--link"
 		:href="richObject.link"
 		target="_blank"
 		@click="navigate">
 		<span class="widget-file__image" :class="filePreviewClass" :style="filePreviewStyle">
 			<template v-if="!previewUrl">
-				<FolderIcon v-if="isFolder" :size="88" fill-color="var(--color-primary-element)" />
+				<FolderIcon v-if="isFolder" :size="88" fillColor="var(--color-primary-element)" />
 				<FileIcon v-else :size="88" />
 			</template>
 		</span>
@@ -70,14 +53,21 @@
 </template>
 
 <script lang="ts">
-import { defineComponent, type Component, type PropType } from 'vue'
-import { generateRemoteUrl, generateUrl } from '@nextcloud/router'
+import type { Node } from '@nextcloud/files'
+import type { PropType } from 'vue'
+
 import { getCurrentUser } from '@nextcloud/auth'
 import { getFilePickerBuilder } from '@nextcloud/dialogs'
-import { Node } from '@nextcloud/files'
+import { File, Permission } from '@nextcloud/files'
+import { t } from '@nextcloud/l10n'
+import { generateRemoteUrl, generateUrl } from '@nextcloud/router'
+import { canView, getViewer } from '@nextcloud/viewer'
+import path from 'path'
+import { defineComponent } from 'vue'
 import FileIcon from 'vue-material-design-icons/File.vue'
 import FolderIcon from 'vue-material-design-icons/Folder.vue'
-import path from 'path'
+import { generateFileUrl } from '../utils/generateUrl.ts'
+import { logger } from '../utils/logger.ts'
 
 // see lib/private/Collaboration/Reference/File/FileReferenceProvider.php
 type Ressource = {
@@ -89,31 +79,9 @@ type Ressource = {
 	mimetype: string
 	mtime: number // as unix timestamp
 	'preview-available': boolean
-}
-
-type ViewerHandler = {
-	id: string
-	group: string
-	mimes: string[]
-	component: Component
-}
-
-/**
- * Minimal mock of the legacy Viewer FileInfo
- * TODO: replace by Node object
- */
-type ViewerFile = {
-	filename: string // the path to the root folder
-	basename: string // the file name
-	lastmod: Date // the last modification date
-	size: number // the file size in bytes
-	type: string
-	mime: string
-	fileid: number
-	failed: boolean
-	loaded: boolean
-	davPath: string
-	source: string
+	permissions?: number
+	'hide-download'?: 'yes' | 'no'
+	'can-download'?: 'yes' | 'no'
 }
 
 export default defineComponent({
@@ -122,15 +90,18 @@ export default defineComponent({
 		FolderIcon,
 		FileIcon,
 	},
+
 	props: {
 		richObject: {
 			type: Object as PropType<Ressource>,
 			required: true,
 		},
+
 		accessible: {
 			type: Boolean,
 			default: true,
 		},
+
 		interactive: {
 			type: Boolean,
 			default: true,
@@ -139,46 +110,65 @@ export default defineComponent({
 
 	data() {
 		return {
+			// The element @nextcloud/viewer defines to show a file anywhere
+			viewerFileTag: 'nc-viewer-file',
 			previewUrl: null as string | null,
 			failedViewer: false,
 		}
 	},
 
 	computed: {
-		availableViewerHandlers(): ViewerHandler[] {
-			return (window?.OCA?.Viewer?.availableHandlers || []) as ViewerHandler[]
-		},
-		viewerHandler(): ViewerHandler | undefined {
-			return this.availableViewerHandlers
-				.find(handler => handler.mimes.includes(this.richObject.mimetype))
-		},
-		viewerFile(): ViewerFile {
-			const davSource = generateRemoteUrl(`dav/files/${getCurrentUser()?.uid}/${this.richObject.path}`)
-				.replace(/\/\/$/, '/')
-			return {
-				filename: this.richObject.path,
-				basename: this.richObject.name,
-				lastmod: new Date(this.richObject.mtime * 1000),
-				size: this.richObject.size,
-				type: 'file',
-				mime: this.richObject.mimetype,
-				fileid: this.richObject.id,
-				failed: false,
-				loaded: true,
-				davPath: davSource,
-				source: davSource,
+		/**
+		 * The file, as the viewer takes it. The server resolved the reference
+		 * for this user: the path is in their folder, a file shared with them
+		 * included. None for a guest, who has no folder
+		 */
+		node(): File | null {
+			const uid = getCurrentUser()?.uid
+			if (!uid || this.isFolder) {
+				return null
 			}
+			return new File({
+				id: this.richObject.id,
+				source: generateRemoteUrl(`dav/files/${uid}/${this.richObject.path}`).replace(/\/\/$/, '/'),
+				root: `/files/${uid}`,
+				displayname: this.richObject.name,
+				mime: this.richObject.mimetype,
+				size: this.richObject.size,
+				mtime: new Date(this.richObject.mtime * 1000),
+				// Not known here, and not needed to show it
+				owner: null,
+				// Readable at least, or this widget would say it is not accessible
+				permissions: this.richObject.permissions ?? Permission.READ,
+				attributes: {
+					hasPreview: this.richObject['preview-available'],
+					// What a share allows, which the viewer reads as DAV gives it:
+					// no download offered, and the preview asked for by hand
+					'hide-download': this.richObject['hide-download'] === 'yes',
+					...(this.richObject['can-download'] === 'no'
+						? { 'share-attributes': JSON.stringify([{ scope: 'permissions', key: 'download', value: false }]) }
+						: {}),
+				},
+			})
+		},
+
+		/** Whether the viewer has something to show the file with */
+		viewable(): boolean {
+			return this.node !== null && canView(this.node)
 		},
 
 		fileSize() {
 			return window.OC.Util.humanFileSize(this.richObject.size)
 		},
+
 		fileMtime() {
 			return window.OC.Util.relativeModifiedDate(this.richObject.mtime * 1000)
 		},
+
 		filePath() {
 			return path.dirname(this.richObject.path)
 		},
+
 		filePreviewStyle() {
 			if (this.previewUrl) {
 				return {
@@ -187,13 +177,14 @@ export default defineComponent({
 			}
 			return {}
 		},
+
 		filePreviewClass() {
 			if (this.previewUrl) {
 				return 'widget-file__image--preview'
 			}
 			return 'widget-file__image--icon'
-
 		},
+
 		isFolder() {
 			return this.richObject.mimetype === 'httpd/unix-directory'
 		},
@@ -208,22 +199,23 @@ export default defineComponent({
 			img.onload = () => {
 				this.previewUrl = previewUrl
 			}
-			img.onerror = err => {
-				console.error('could not load recommendation preview', err)
+			img.onerror = (error) => {
+				logger.error('could not load recommendation preview', { error })
 			}
 			img.src = previewUrl
 		}
 	},
+
 	methods: {
 		navigate(event) {
 			if (this.isFolder) {
 				event.stopPropagation()
 				event.preventDefault()
 				this.openFilePicker()
-			} else if (window?.OCA?.Viewer?.mimetypes.indexOf(this.richObject.mimetype) !== -1 && !window?.OCA?.Viewer?.file) {
+			} else if (this.viewable) {
 				event.stopPropagation()
 				event.preventDefault()
-				window?.OCA?.Viewer?.open({ path: this.richObject.path })
+				getViewer().open([this.node!], this.node!)
 			}
 		},
 
@@ -234,14 +226,12 @@ export default defineComponent({
 				.addButton({
 					id: 'open',
 					label: this.t('settings', 'Open in files'),
-					callback(nodes: Node[]) {
-						if (nodes[0]) {
-							window.open(generateUrl('/f/{fileid}', {
-								fileid: nodes[0].fileid,
-							}))
+					callback([node]: Node[]) {
+						if (node) {
+							window.open(generateFileUrl(node.fileid!))
 						}
 					},
-					type: 'primary',
+					variant: 'primary',
 				})
 				.disableNavigation()
 				.startAt(this.richObject.path)
@@ -272,7 +262,7 @@ export default defineComponent({
 			min-width: 88px;
 			max-width: 88px;
 			padding: 12px;
-			padding-right: 0;
+			padding-inline-end: 0;
 			display: flex;
 			align-items: center;
 			justify-content: center;

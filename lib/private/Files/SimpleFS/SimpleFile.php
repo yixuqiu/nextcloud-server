@@ -1,44 +1,29 @@
 <?php
+
 /**
- * @copyright 2016 Roeland Jago Douma <roeland@famdouma.nl>
- *
- * @author Christoph Wurst <christoph@winzerhof-wurst.at>
- * @author Julius Härtl <jus@bitgrid.net>
- * @author Roeland Jago Douma <roeland@famdouma.nl>
- *
- * @license GNU AGPL version 3 or any later version
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
- *
+ * SPDX-FileCopyrightText: 2016 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
+
 namespace OC\Files\SimpleFS;
 
 use OCP\Files\File;
+use OCP\Files\GenericFileException;
 use OCP\Files\NotFoundException;
 use OCP\Files\NotPermittedException;
 use OCP\Files\SimpleFS\ISimpleFile;
+use OCP\Lock\LockedException;
 
 class SimpleFile implements ISimpleFile {
-	private File $file;
-
-	public function __construct(File $file) {
-		$this->file = $file;
+	public function __construct(
+		private File $file,
+	) {
 	}
 
 	/**
 	 * Get the name
 	 */
+	#[\Override]
 	public function getName(): string {
 		return $this->file->getName();
 	}
@@ -46,6 +31,7 @@ class SimpleFile implements ISimpleFile {
 	/**
 	 * Get the size in bytes
 	 */
+	#[\Override]
 	public function getSize(): int|float {
 		return $this->file->getSize();
 	}
@@ -53,6 +39,7 @@ class SimpleFile implements ISimpleFile {
 	/**
 	 * Get the ETag
 	 */
+	#[\Override]
 	public function getETag(): string {
 		return $this->file->getEtag();
 	}
@@ -60,6 +47,7 @@ class SimpleFile implements ISimpleFile {
 	/**
 	 * Get the last modification time
 	 */
+	#[\Override]
 	public function getMTime(): int {
 		return $this->file->getMTime();
 	}
@@ -67,9 +55,12 @@ class SimpleFile implements ISimpleFile {
 	/**
 	 * Get the content
 	 *
-	 * @throws NotPermittedException
+	 * @throws GenericFileException
+	 * @throws LockedException
 	 * @throws NotFoundException
+	 * @throws NotPermittedException
 	 */
+	#[\Override]
 	public function getContent(): string {
 		$result = $this->file->getContent();
 
@@ -84,9 +75,12 @@ class SimpleFile implements ISimpleFile {
 	 * Overwrite the file
 	 *
 	 * @param string|resource $data
-	 * @throws NotPermittedException
+	 * @throws GenericFileException
+	 * @throws LockedException
 	 * @throws NotFoundException
+	 * @throws NotPermittedException
 	 */
+	#[\Override]
 	public function putContent($data): void {
 		try {
 			$this->file->putContent($data);
@@ -123,12 +117,12 @@ class SimpleFile implements ISimpleFile {
 		}
 	}
 
-
 	/**
 	 * Delete the file
 	 *
 	 * @throws NotPermittedException
 	 */
+	#[\Override]
 	public function delete(): void {
 		$this->file->delete();
 	}
@@ -136,6 +130,7 @@ class SimpleFile implements ISimpleFile {
 	/**
 	 * Get the MimeType
 	 */
+	#[\Override]
 	public function getMimeType(): string {
 		return $this->file->getMimeType();
 	}
@@ -143,6 +138,7 @@ class SimpleFile implements ISimpleFile {
 	/**
 	 * {@inheritDoc}
 	 */
+	#[\Override]
 	public function getExtension(): string {
 		return $this->file->getExtension();
 	}
@@ -151,9 +147,10 @@ class SimpleFile implements ISimpleFile {
 	 * Open the file as stream for reading, resulting resource can be operated as stream like the result from php's own fopen
 	 *
 	 * @return resource|false
-	 * @throws \OCP\Files\NotPermittedException
+	 * @throws NotPermittedException
 	 * @since 14.0.0
 	 */
+	#[\Override]
 	public function read() {
 		return $this->file->fopen('r');
 	}
@@ -162,9 +159,10 @@ class SimpleFile implements ISimpleFile {
 	 * Open the file as stream for writing, resulting resource can be operated as stream like the result from php's own fopen
 	 *
 	 * @return resource|false
-	 * @throws \OCP\Files\NotPermittedException
+	 * @throws NotPermittedException
 	 * @since 14.0.0
 	 */
+	#[\Override]
 	public function write() {
 		return $this->file->fopen('w');
 	}

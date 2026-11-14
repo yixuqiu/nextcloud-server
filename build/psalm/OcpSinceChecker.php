@@ -3,26 +3,15 @@
 declare(strict_types=1);
 
 /**
- * @copyright 2023 Daniel Kesselberg <mail@danielkesselberg.de>
- *
- * @author 2023 Daniel Kesselberg <mail@danielkesselberg.de>
- *
- * This code is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License, version 3,
- * as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program.  If not, see <http://www.gnu.org/licenses/>
- *
+ * SPDX-FileCopyrightText: 2023 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-only
  */
 
 use PhpParser\Node\Stmt;
+use PhpParser\Node\Stmt\ClassConst;
 use PhpParser\Node\Stmt\ClassLike;
+use PhpParser\Node\Stmt\ClassMethod;
+use PhpParser\Node\Stmt\EnumCase;
 use Psalm\CodeLocation;
 use Psalm\DocComment;
 use Psalm\Exception\DocblockParseException;
@@ -33,17 +22,88 @@ use Psalm\Plugin\EventHandler\Event\AfterClassLikeVisitEvent;
 
 class OcpSinceChecker implements Psalm\Plugin\EventHandler\AfterClassLikeVisitInterface {
 	public static function afterClassLikeVisit(AfterClassLikeVisitEvent $event): void {
-		$stmt = $event->getStmt();
+		$classLike = $event->getStmt();
 		$statementsSource = $event->getStatementsSource();
 
-		self::checkClassComment($stmt, $statementsSource);
-
-		foreach ($stmt->getMethods() as $method) {
-			self::checkMethodOrConstantComment($method, $statementsSource, 'method');
+		if (!str_contains($statementsSource->getFilePath(), '/lib/public/')) {
+			return;
 		}
 
-		foreach ($stmt->getConstants() as $constant) {
-			self::checkMethodOrConstantComment($constant, $statementsSource, 'constant');
+		$isTesting = str_contains($statementsSource->getFilePath(), '/lib/public/Notification/')
+			|| str_contains($statementsSource->getFilePath(), '/lib/public/Config/')
+			|| str_contains($statementsSource->getFilePath(), '/lib/public/Migration/Attributes/')
+			|| str_contains($statementsSource->getFilePath(), 'CalendarEventStatus');
+
+		if ($isTesting) {
+			self::checkStatementAttributes($classLike, $statementsSource);
+		} else {
+			self::checkClassComment($classLike, $statementsSource);
+		}
+		foreach ($classLike->stmts as $stmt) {
+			if ($stmt instanceof ClassConst) {
+				self::checkStatementComment($stmt, $statementsSource, 'constant');
+			}
+
+			if ($stmt instanceof ClassMethod && ($stmt->isPublic() || $stmt->isProtected())) {
+				self::checkStatementComment($stmt, $statementsSource, 'method');
+			}
+
+			if ($stmt instanceof EnumCase) {
+				if ($isTesting) {
+					self::checkStatementAttributes($classLike, $statementsSource);
+				} else {
+					self::checkStatementComment($stmt, $statementsSource, 'enum');
+				}
+			}
+		}
+	}
+
+	private static function checkStatementAttributes(ClassLike $stmt, FileSource $statementsSource): void {
+		$hasAppFrameworkAttribute = false;
+		$mustBeConsumable = false;
+		$isConsumable = false;
+		foreach ($stmt->attrGroups as $attrGroup) {
+			foreach ($attrGroup->attrs as $attr) {
+				if (in_array($attr->name->getLast(), [
+					'Catchable',
+					'Consumable',
+					'Dispatchable',
+					'Implementable',
+					'Listenable',
+					'Throwable',
+				], true)) {
+					$hasAppFrameworkAttribute = true;
+					self::checkAttributeHasValidSinceVersion($attr, $statementsSource);
+				}
+				if (in_array($attr->name->getLast(), [
+					'Catchable',
+					'Consumable',
+					'Listenable',
+				], true)) {
+					$isConsumable = true;
+				}
+				if ($attr->name->getLast() === 'ExceptionalImplementable') {
+					$mustBeConsumable = true;
+				}
+			}
+		}
+
+		if ($mustBeConsumable && !$isConsumable) {
+			IssueBuffer::maybeAdd(
+				new InvalidDocblock(
+					'Attribute OCP\\AppFramework\\Attribute\\ExceptionalImplementable is only valid on classes that also have OCP\\AppFramework\\Attribute\\Consumable',
+					new CodeLocation($statementsSource, $stmt)
+				)
+			);
+		}
+
+		if (!$hasAppFrameworkAttribute) {
+			IssueBuffer::maybeAdd(
+				new InvalidDocblock(
+					'At least one of the OCP\\AppFramework\\Attribute attributes is required',
+					new CodeLocation($statementsSource, $stmt)
+				)
+			);
 		}
 	}
 
@@ -80,6 +140,9 @@ class OcpSinceChecker implements Psalm\Plugin\EventHandler\AfterClassLikeVisitIn
 				)
 			);
 		}
+		foreach ($parsedDocblock->tags['since'] ?? [] as $since) {
+			self::checkSinceIsReleasable(trim($since), $statementsSource, $stmt);
+		}
 
 		if (isset($parsedDocblock->tags['depreacted'])) {
 			IssueBuffer::maybeAdd(
@@ -91,7 +154,7 @@ class OcpSinceChecker implements Psalm\Plugin\EventHandler\AfterClassLikeVisitIn
 		}
 	}
 
-	private static function checkMethodOrConstantComment(Stmt $stmt, FileSource $statementsSource, string $type): void {
+	private static function checkStatementComment(Stmt $stmt, FileSource $statementsSource, string $type): void {
 		$docblock = $stmt->getDocComment();
 
 		if ($docblock === null) {
@@ -124,6 +187,9 @@ class OcpSinceChecker implements Psalm\Plugin\EventHandler\AfterClassLikeVisitIn
 				)
 			);
 		}
+		foreach ($parsedDocblock->tags['since'] ?? [] as $since) {
+			self::checkSinceIsReleasable(trim($since), $statementsSource, $stmt);
+		}
 
 		if (isset($parsedDocblock->tags['depreacted'])) {
 			IssueBuffer::maybeAdd(
@@ -133,5 +199,66 @@ class OcpSinceChecker implements Psalm\Plugin\EventHandler\AfterClassLikeVisitIn
 				)
 			);
 		}
+	}
+
+	private static function checkAttributeHasValidSinceVersion(\PhpParser\Node\Attribute $stmt, FileSource $statementsSource): void {
+		foreach ($stmt->args as $arg) {
+			if ($arg->name?->name === 'since') {
+				if (!$arg->value instanceof \PhpParser\Node\Scalar\String_) {
+					IssueBuffer::maybeAdd(
+						new InvalidDocblock(
+							'Attribute since argument is not a valid version string',
+							new CodeLocation($statementsSource, $stmt)
+						)
+					);
+				} else {
+					if (!preg_match('/^[1-9][0-9]*(\.[0-9]+){0,3}$/', $arg->value->value)) {
+						IssueBuffer::maybeAdd(
+							new InvalidDocblock(
+								'Attribute since argument is not a valid version string',
+								new CodeLocation($statementsSource, $stmt)
+							)
+						);
+					} else {
+						self::checkSinceIsReleasable($arg->value->value, $statementsSource, $stmt);
+					}
+				}
+			}
+		}
+	}
+
+	/**
+	 * A since version must not be newer than the next patch release of the
+	 * current branch, so backports with an unadjusted since fail
+	 */
+	private static function checkSinceIsReleasable(string $since, FileSource $statementsSource, \PhpParser\Node $stmt): void {
+		// Backports may list multiple versions: "33.0.1, 32.0.7"
+		if (!preg_match('/^\d+(\.\d+)*(\s*,\s*\d+(\.\d+)*)*/', $since, $list)) {
+			return;
+		}
+
+		$maxVersion = self::getMaxSinceVersion();
+		foreach (preg_split('/\s*,\s*/', $list[0]) as $version) {
+			if (version_compare($version, $maxVersion, '<=')) {
+				return;
+			}
+		}
+
+		IssueBuffer::maybeAdd(
+			new InvalidDocblock(
+				'Since version ' . $list[0] . ' is newer than the next release ' . $maxVersion . ' of this branch, please adjust it to the version the change is released in.',
+				new CodeLocation($statementsSource, $stmt)
+			)
+		);
+	}
+
+	private static function getMaxSinceVersion(): string {
+		static $maxVersion = null;
+		if ($maxVersion === null) {
+			require __DIR__ . '/../../version.php';
+			/** @var array{0: int, 1: int, 2: int, 3: int} $OC_Version */
+			$maxVersion = $OC_Version[0] . '.' . $OC_Version[1] . '.' . ($OC_Version[2] + 1);
+		}
+		return $maxVersion;
 	}
 }

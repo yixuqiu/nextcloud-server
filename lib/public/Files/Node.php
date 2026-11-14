@@ -1,32 +1,12 @@
 <?php
+
 /**
- * @copyright Copyright (c) 2016, ownCloud, Inc.
- *
- * @author Bernhard Posselt <dev@bernhard-posselt.com>
- * @author Joas Schilling <coding@schilljs.com>
- * @author Jörn Friedrich Dreyer <jfd@butonic.de>
- * @author Julius Härtl <jus@bitgrid.net>
- * @author Morris Jobke <hey@morrisjobke.de>
- * @author Robin Appelman <robin@icewind.nl>
- * @author Roeland Jago Douma <roeland@famdouma.nl>
- *
- * @license AGPL-3.0
- *
- * This code is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License, version 3,
- * as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program. If not, see <http://www.gnu.org/licenses/>
- *
+ * SPDX-FileCopyrightText: 2016-2024 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-FileCopyrightText: 2016 ownCloud, Inc.
+ * SPDX-License-Identifier: AGPL-3.0-only
  */
 // use OCP namespace for all classes that are considered public.
-// This means that they should be used by apps instead of the internal ownCloud classes
+// This means that they should be used by apps instead of the internal Nextcloud classes
 
 namespace OCP\Files;
 
@@ -92,6 +72,7 @@ interface Node extends FileInfo {
 	 * @throws NotFoundException
 	 * @since 6.0.0
 	 */
+	#[\Override]
 	public function getStorage();
 
 	/**
@@ -100,6 +81,7 @@ interface Node extends FileInfo {
 	 * @return string
 	 * @since 6.0.0
 	 */
+	#[\Override]
 	public function getPath();
 
 	/**
@@ -108,6 +90,7 @@ interface Node extends FileInfo {
 	 * @return string
 	 * @since 6.0.0
 	 */
+	#[\Override]
 	public function getInternalPath();
 
 	/**
@@ -118,6 +101,7 @@ interface Node extends FileInfo {
 	 * @throws NotFoundException
 	 * @since 6.0.0
 	 */
+	#[\Override]
 	public function getId();
 
 	/**
@@ -139,6 +123,7 @@ interface Node extends FileInfo {
 	 * @throws NotFoundException
 	 * @since 6.0.0
 	 */
+	#[\Override]
 	public function getMTime();
 
 	/**
@@ -150,6 +135,7 @@ interface Node extends FileInfo {
 	 * @throws NotFoundException
 	 * @since 6.0.0
 	 */
+	#[\Override]
 	public function getSize($includeMounts = true);
 
 	/**
@@ -162,8 +148,8 @@ interface Node extends FileInfo {
 	 * @throws NotFoundException
 	 * @since 6.0.0
 	 */
+	#[\Override]
 	public function getEtag();
-
 
 	/**
 	 * Get the permissions of the file or folder as a combination of one or more of the following constants:
@@ -178,6 +164,7 @@ interface Node extends FileInfo {
 	 * @throws NotFoundException
 	 * @since 6.0.0 - namespace of constants has changed in 8.0.0
 	 */
+	#[\Override]
 	public function getPermissions();
 
 	/**
@@ -188,6 +175,7 @@ interface Node extends FileInfo {
 	 * @throws NotFoundException
 	 * @since 6.0.0
 	 */
+	#[\Override]
 	public function isReadable();
 
 	/**
@@ -198,6 +186,7 @@ interface Node extends FileInfo {
 	 * @throws NotFoundException
 	 * @since 6.0.0
 	 */
+	#[\Override]
 	public function isUpdateable();
 
 	/**
@@ -208,6 +197,7 @@ interface Node extends FileInfo {
 	 * @throws NotFoundException
 	 * @since 6.0.0
 	 */
+	#[\Override]
 	public function isDeletable();
 
 	/**
@@ -218,6 +208,7 @@ interface Node extends FileInfo {
 	 * @throws NotFoundException
 	 * @since 6.0.0
 	 */
+	#[\Override]
 	public function isShareable();
 
 	/**
@@ -234,6 +225,7 @@ interface Node extends FileInfo {
 	 * @return string
 	 * @since 6.0.0
 	 */
+	#[\Override]
 	public function getName();
 
 	/**
@@ -263,7 +255,7 @@ interface Node extends FileInfo {
 	 * Check the type of an existing lock.
 	 *
 	 * A shared lock can be changed to an exclusive lock is there is exactly one shared lock on the file,
-	 * an exclusive lock can always be changed to a shared lock since there can only be one exclusive lock int he first place.
+	 * an exclusive lock can always be changed to a shared lock since there can only be one exclusive lock in the first place.
 	 *
 	 * A locked exception will be thrown when these preconditions are not met.
 	 * Note that this is also the case if no existing lock exists for the file.

@@ -1,30 +1,17 @@
 <?php
+
 /**
- * @copyright Copyright (c) 2023 Lucas Azevedo <lhs_azevedo@hotmail.com>
- *
- * @author Lucas Azevedo <lhs_azevedo@hotmail.com>
- *
- * @license GNU AGPL version 3 or any later version
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
- *
+ * SPDX-FileCopyrightText: 2023 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
+
 namespace OC\Core\Command\User\AuthTokens;
 
 use DateTimeImmutable;
 use OC\Authentication\Token\IProvider;
 use OC\Core\Command\Base;
+use OCP\Authentication\Exceptions\InvalidTokenException;
+use OCP\Authentication\Exceptions\WipeTokenException;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Exception\RuntimeException;
 use Symfony\Component\Console\Input\InputArgument;
@@ -39,6 +26,7 @@ class Delete extends Base {
 		parent::__construct();
 	}
 
+	#[\Override]
 	protected function configure(): void {
 		$this
 			->setName('user:auth-tokens:delete')
@@ -58,13 +46,21 @@ class Delete extends Base {
 				null,
 				InputOption::VALUE_REQUIRED,
 				'Delete tokens last used before a given date.'
+			)
+			->addOption(
+				'cancel-wipe',
+				null,
+				InputOption::VALUE_NONE,
+				'Allow deleting a token that is marked for remote wipe. The pending wipe will not run.'
 			);
 	}
 
+	#[\Override]
 	protected function execute(InputInterface $input, OutputInterface $output): int {
 		$uid = $input->getArgument('uid');
-		$id = (int) $input->getArgument('id');
+		$id = (int)$input->getArgument('id');
 		$before = $input->getOption('last-used-before');
+		$cancelWipe = (bool)$input->getOption('cancel-wipe');
 
 		if ($before) {
 			if ($id) {
@@ -77,6 +73,19 @@ class Delete extends Base {
 		if (!$id) {
 			throw new RuntimeException('Not enough arguments. Specify the token <id> or use the --last-used-before option.');
 		}
+
+		if (!$cancelWipe) {
+			try {
+				$this->tokenProvider->getTokenById($id);
+			} catch (WipeTokenException $e) {
+				$output->writeln('<error>Token ' . $id . ' is marked for remote wipe. Pass --cancel-wipe to delete it anyway; the pending wipe will not run.</error>');
+				return Command::FAILURE;
+			} catch (InvalidTokenException $e) {
+				// Token doesn't exist, has expired, or is otherwise unusable.
+				// Defer to invalidateTokenById, which handles the no-op case.
+			}
+		}
+
 		return $this->deleteById($uid, $id);
 	}
 

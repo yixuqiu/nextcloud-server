@@ -1,24 +1,8 @@
 <?php
+
 /**
- * @copyright Copyright (c) 2024 Ferdinand Thiessen <opensource@fthiessen.de>
- *
- * @author Ferdinand Thiessen <opensource@fthiessen.de>
- *
- * @license AGPL-3.0-or-later
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
- *
+ * SPDX-FileCopyrightText: 2024 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
 namespace OC\App\AppStore\Fetcher;
@@ -32,6 +16,12 @@ use OCP\IConfig;
 use OCP\Support\Subscription\IRegistry;
 use Psr\Log\LoggerInterface;
 
+/**
+ * Fetch app discover section entries from the app store
+ *
+ * @psalm-import-type AppStoreFetcherDiscoverElement from ResponseDefinitions
+ * @template-extends Fetcher<AppStoreFetcherDiscoverElement>
+ */
 class AppDiscoverFetcher extends Fetcher {
 
 	public const INVALIDATE_AFTER_SECONDS = 86400;
@@ -62,12 +52,14 @@ class AppDiscoverFetcher extends Fetcher {
 	 * Get the app discover section entries
 	 *
 	 * @param bool $allowUnstable Include also upcoming entries
+	 * @return list<AppStoreFetcherDiscoverElement>
 	 */
-	public function get($allowUnstable = false) {
+	#[\Override]
+	public function get($allowUnstable = false): array {
 		$entries = parent::get(false);
 		$now = new DateTimeImmutable();
 
-		return array_filter($entries, function (array $entry) use ($now, $allowUnstable) {
+		return array_values(array_filter($entries, function (array $entry) use ($now, $allowUnstable) {
 			// Always remove expired entries
 			if (isset($entry['expiryDate'])) {
 				try {
@@ -95,10 +87,10 @@ class AppDiscoverFetcher extends Fetcher {
 			}
 			// Otherwise the entry is not time limited and should stay
 			return true;
-		});
+		}));
 	}
 
-	public function getETag(): string|null {
+	public function getETag(): ?string {
 		$rootFolder = $this->appData->getFolder('/');
 
 		try {

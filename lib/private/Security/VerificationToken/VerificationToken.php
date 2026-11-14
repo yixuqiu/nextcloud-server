@@ -1,31 +1,14 @@
 <?php
 
 declare(strict_types=1);
-
 /**
- * @copyright Copyright (c) 2021 Arthur Schiwon <blizzz@arthur-schiwon.de>
- *
- * @author Arthur Schiwon <blizzz@arthur-schiwon.de>
- *
- * @license GNU AGPL version 3 or any later version
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program.  If not, see <https://www.gnu.org/licenses/>.
- *
+ * SPDX-FileCopyrightText: 2021 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
 namespace OC\Security\VerificationToken;
 
+use OC\User\LastInteractiveLogin;
 use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\BackgroundJob\IJobList;
 use OCP\IConfig;
@@ -44,7 +27,8 @@ class VerificationToken implements IVerificationToken {
 		private ICrypto $crypto,
 		private ITimeFactory $timeFactory,
 		private ISecureRandom $secureRandom,
-		private IJobList $jobList
+		private IJobList $jobList,
+		private LastInteractiveLogin $lastInteractiveLogin,
 	) {
 	}
 
@@ -55,6 +39,7 @@ class VerificationToken implements IVerificationToken {
 		throw new InvalidTokenException($code);
 	}
 
+	#[\Override]
 	public function check(
 		string $token,
 		?IUser $user,
@@ -72,7 +57,7 @@ class VerificationToken implements IVerificationToken {
 		}
 
 		try {
-			$decryptedToken = $this->crypto->decrypt($encryptedToken, $passwordPrefix.$this->config->getSystemValueString('secret'));
+			$decryptedToken = $this->crypto->decrypt($encryptedToken, $passwordPrefix . $this->config->getSystemValueString('secret'));
 		} catch (\Exception $e) {
 			// Retry with empty secret as a fallback for instances where the secret might not have been set by accident
 			try {
@@ -87,16 +72,17 @@ class VerificationToken implements IVerificationToken {
 			$this->throwInvalidTokenException(InvalidTokenException::TOKEN_INVALID_FORMAT);
 		}
 
-		if ($splitToken[0] < ($this->timeFactory->getTime() - self::TOKEN_LIFETIME)
-			|| ($expiresWithLogin && $user->getLastLogin() > $splitToken[0])) {
-			$this->throwInvalidTokenException(InvalidTokenException::TOKEN_EXPIRED);
-		}
-
 		if (!hash_equals($splitToken[1], $token)) {
 			$this->throwInvalidTokenException(InvalidTokenException::TOKEN_MISMATCH);
 		}
+
+		if ($splitToken[0] < ($this->timeFactory->getTime() - self::TOKEN_LIFETIME)
+			|| ($expiresWithLogin && $this->lastInteractiveLogin->get($user) > $splitToken[0])) {
+			$this->throwInvalidTokenException(InvalidTokenException::TOKEN_EXPIRED);
+		}
 	}
 
+	#[\Override]
 	public function create(
 		IUser $user,
 		string $subject,
@@ -104,11 +90,11 @@ class VerificationToken implements IVerificationToken {
 	): string {
 		$token = $this->secureRandom->generate(
 			21,
-			ISecureRandom::CHAR_DIGITS.
-			ISecureRandom::CHAR_LOWER.
-			ISecureRandom::CHAR_UPPER
+			ISecureRandom::CHAR_DIGITS
+			. ISecureRandom::CHAR_LOWER
+			. ISecureRandom::CHAR_UPPER
 		);
-		$tokenValue = $this->timeFactory->getTime() .':'. $token;
+		$tokenValue = $this->timeFactory->getTime() . ':' . $token;
 		$encryptedValue = $this->crypto->encrypt($tokenValue, $passwordPrefix . $this->config->getSystemValueString('secret'));
 		$this->config->setUserValue($user->getUID(), 'core', $subject, $encryptedValue);
 		$jobArgs = json_encode([
@@ -122,6 +108,7 @@ class VerificationToken implements IVerificationToken {
 		return $token;
 	}
 
+	#[\Override]
 	public function delete(string $token, IUser $user, string $subject): void {
 		$this->config->deleteUserValue($user->getUID(), 'core', $subject);
 	}

@@ -3,30 +3,13 @@
 declare(strict_types=1);
 
 /**
- * @copyright Copyright (c) 2019, Daniel Kesselberg (mail@danielkesselberg.de)
- *
- * @author Daniel Kesselberg <mail@danielkesselberg.de>
- * @author Morris Jobke <hey@morrisjobke.de>
- *
- * @license GNU AGPL version 3 or any later version
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
- *
+ * SPDX-FileCopyrightText: 2019 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
+
 namespace OC\Repair\NC16;
 
-use OCP\Files\IAppData;
+use OCP\Files\AppData\IAppDataFactory;
 use OCP\Files\NotFoundException;
 use OCP\Files\SimpleFS\ISimpleFolder;
 use OCP\IConfig;
@@ -45,27 +28,23 @@ use RuntimeException;
  * photo could be returned for this vcard. These invalid files are removed by this migration step.
  */
 class CleanupCardDAVPhotoCache implements IRepairStep {
-	/** @var IConfig */
-	private $config;
-
-	/** @var IAppData */
-	private $appData;
-
-	private LoggerInterface $logger;
-
-	public function __construct(IConfig $config, IAppData $appData, LoggerInterface $logger) {
-		$this->config = $config;
-		$this->appData = $appData;
-		$this->logger = $logger;
+	public function __construct(
+		private IConfig $config,
+		private IAppDataFactory $appDataFactory,
+		private LoggerInterface $logger,
+	) {
 	}
 
+	#[\Override]
 	public function getName(): string {
 		return 'Cleanup invalid photocache files for carddav';
 	}
 
 	private function repair(IOutput $output): void {
+		$photoCacheAppData = $this->appDataFactory->get('dav-photocache');
+
 		try {
-			$folders = $this->appData->getDirectoryListing();
+			$folders = $photoCacheAppData->getDirectoryListing();
 		} catch (NotFoundException $e) {
 			return;
 		} catch (RuntimeException $e) {
@@ -102,6 +81,7 @@ class CleanupCardDAVPhotoCache implements IRepairStep {
 		);
 	}
 
+	#[\Override]
 	public function run(IOutput $output): void {
 		if ($this->shouldRun()) {
 			$this->repair($output);

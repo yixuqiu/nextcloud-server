@@ -2,24 +2,8 @@
 
 declare(strict_types=1);
 /**
- * @copyright Copyright (c) 2022 Julius Härtl <jus@bitgrid.net>
- *
- * @author Julius Härtl <jus@bitgrid.net>
- *
- * @license GNU AGPL version 3 or any later version
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
+ * SPDX-FileCopyrightText: 2022 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
 namespace OC\Collaboration\Reference;
@@ -27,6 +11,7 @@ namespace OC\Collaboration\Reference;
 use OC\AppFramework\Bootstrap\Coordinator;
 use OC\Collaboration\Reference\File\FileReferenceProvider;
 use OCP\Collaboration\Reference\IDiscoverableReferenceProvider;
+use OCP\Collaboration\Reference\IPublicReferenceProvider;
 use OCP\Collaboration\Reference\IReference;
 use OCP\Collaboration\Reference\IReferenceManager;
 use OCP\Collaboration\Reference\IReferenceProvider;
@@ -64,6 +49,7 @@ class ReferenceManager implements IReferenceManager {
 	 *
 	 * @return string[]
 	 */
+	#[\Override]
 	public function extractReferences(string $text): array {
 		preg_match_all(IURLGenerator::URL_REGEX, $text, $matches);
 		$references = $matches[0] ?? [];
@@ -75,20 +61,22 @@ class ReferenceManager implements IReferenceManager {
 	/**
 	 * Try to get a cached reference object from a reference string
 	 */
-	public function getReferenceFromCache(string $referenceId): ?IReference {
-		$matchedProvider = $this->getMatchedProvider($referenceId);
+	#[\Override]
+	public function getReferenceFromCache(string $referenceId, bool $public = false, string $sharingToken = ''): ?IReference {
+		$matchedProvider = $this->getMatchedProvider($referenceId, $public);
 
 		if ($matchedProvider === null) {
 			return null;
 		}
 
-		$cacheKey = $this->getFullCacheKey($matchedProvider, $referenceId);
+		$cacheKey = $this->getFullCacheKey($matchedProvider, $referenceId, $public, $sharingToken);
 		return $this->getReferenceByCacheKey($cacheKey);
 	}
 
 	/**
 	 * Try to get a cached reference object from a full cache key
 	 */
+	#[\Override]
 	public function getReferenceByCacheKey(string $cacheKey): ?IReference {
 		$cached = $this->cache->get($cacheKey);
 		if ($cached) {
@@ -102,20 +90,26 @@ class ReferenceManager implements IReferenceManager {
 	 * Get a reference object from a reference string with a matching provider
 	 * Use a cached reference if possible
 	 */
-	public function resolveReference(string $referenceId): ?IReference {
-		$matchedProvider = $this->getMatchedProvider($referenceId);
+	#[\Override]
+	public function resolveReference(string $referenceId, bool $public = false, $sharingToken = ''): ?IReference {
+		$matchedProvider = $this->getMatchedProvider($referenceId, $public);
 
 		if ($matchedProvider === null) {
 			return null;
 		}
 
-		$cacheKey = $this->getFullCacheKey($matchedProvider, $referenceId);
+		$cacheKey = $this->getFullCacheKey($matchedProvider, $referenceId, $public, $sharingToken);
 		$cached = $this->cache->get($cacheKey);
 		if ($cached) {
 			return Reference::fromCache($cached);
 		}
 
-		$reference = $matchedProvider->resolveReference($referenceId);
+		$reference = null;
+		if ($public && $matchedProvider instanceof IPublicReferenceProvider) {
+			$reference = $matchedProvider->resolveReferencePublic($referenceId, $sharingToken);
+		} elseif ($matchedProvider instanceof IReferenceProvider) {
+			$reference = $matchedProvider->resolveReference($referenceId);
+		}
 		if ($reference) {
 			$cachePrefix = $matchedProvider->getCachePrefix($referenceId);
 			if ($cachePrefix !== '') {
@@ -133,11 +127,14 @@ class ReferenceManager implements IReferenceManager {
 	 * Try to match a reference string with all the registered providers
 	 * Fallback to the link reference provider (using OpenGraph)
 	 *
-	 * @return IReferenceProvider|null the first matching provider
+	 * @return IReferenceProvider|IPublicReferenceProvider|null the first matching provider
 	 */
-	private function getMatchedProvider(string $referenceId): ?IReferenceProvider {
+	private function getMatchedProvider(string $referenceId, bool $public): null|IReferenceProvider|IPublicReferenceProvider {
 		$matchedProvider = null;
 		foreach ($this->getProviders() as $provider) {
+			if ($public && !($provider instanceof IPublicReferenceProvider)) {
+				continue;
+			}
 			$matchedProvider = $provider->matchReference($referenceId) ? $provider : null;
 			if ($matchedProvider !== null) {
 				break;
@@ -154,8 +151,13 @@ class ReferenceManager implements IReferenceManager {
 	/**
 	 * Get a hashed full cache key from a key and prefix given by a provider
 	 */
-	private function getFullCacheKey(IReferenceProvider $provider, string $referenceId): string {
-		$cacheKey = $provider->getCacheKey($referenceId);
+	private function getFullCacheKey(IReferenceProvider $provider, string $referenceId, bool $public, string $sharingToken): string {
+		if ($public && !($provider instanceof IPublicReferenceProvider)) {
+			throw new \RuntimeException('Provider doesn\'t support public lookups');
+		}
+		$cacheKey = $public
+			? $provider->getCacheKeyPublic($referenceId, $sharingToken)
+			: $provider->getCacheKey($referenceId);
 		return md5($provider->getCachePrefix($referenceId)) . (
 			$cacheKey !== null ? ('-' . md5($cacheKey)) : ''
 		);
@@ -164,6 +166,7 @@ class ReferenceManager implements IReferenceManager {
 	/**
 	 * Remove a specific cache entry from its key+prefix
 	 */
+	#[\Override]
 	public function invalidateCache(string $cachePrefix, ?string $cacheKey = null): void {
 		if ($cacheKey === null) {
 			// clear might be a heavy operation, so we only do it if there have actually been keys set
@@ -210,6 +213,7 @@ class ReferenceManager implements IReferenceManager {
 	/**
 	 * @inheritDoc
 	 */
+	#[\Override]
 	public function getDiscoverableProviders(): array {
 		// preserve 0 based index to avoid returning an object in data responses
 		return array_values(
@@ -222,6 +226,7 @@ class ReferenceManager implements IReferenceManager {
 	/**
 	 * @inheritDoc
 	 */
+	#[\Override]
 	public function touchProvider(string $userId, string $providerId, ?int $timestamp = null): bool {
 		$providers = $this->getDiscoverableProviders();
 		$matchingProviders = array_filter($providers, static function (IDiscoverableReferenceProvider $provider) use ($providerId) {
@@ -233,7 +238,7 @@ class ReferenceManager implements IReferenceManager {
 			}
 
 			$configKey = 'provider-last-use_' . $providerId;
-			$this->config->setUserValue($userId, 'references', $configKey, (string) $timestamp);
+			$this->config->setUserValue($userId, 'references', $configKey, (string)$timestamp);
 			return true;
 		}
 		return false;
@@ -242,6 +247,7 @@ class ReferenceManager implements IReferenceManager {
 	/**
 	 * @inheritDoc
 	 */
+	#[\Override]
 	public function getUserProviderTimestamps(): array {
 		$user = $this->userSession->getUser();
 		if ($user === null) {
@@ -256,7 +262,7 @@ class ReferenceManager implements IReferenceManager {
 		$timestamps = [];
 		foreach ($keys as $key) {
 			$providerId = substr($key, strlen($prefix));
-			$timestamp = (int) $this->config->getUserValue($userId, 'references', $key);
+			$timestamp = (int)$this->config->getUserValue($userId, 'references', $key);
 			$timestamps[$providerId] = $timestamp;
 		}
 		return $timestamps;

@@ -1,35 +1,11 @@
 <?php
+
 /**
- * @copyright Copyright (c) 2016, ownCloud, Inc.
- *
- * @author Bjoern Schiessle <bjoern@schiessle.org>
- * @author Björn Schießle <bjoern@schiessle.org>
- * @author Christoph Wurst <christoph@winzerhof-wurst.at>
- * @author Clark Tomlinson <fallen013@gmail.com>
- * @author Côme Chilliet <come.chilliet@nextcloud.com>
- * @author Joas Schilling <coding@schilljs.com>
- * @author Kevin Niehage <kevin@niehage.name>
- * @author Lukas Reschke <lukas@statuscode.ch>
- * @author Morris Jobke <hey@morrisjobke.de>
- * @author Roeland Jago Douma <roeland@famdouma.nl>
- * @author Stefan Weiberg <sweiberg@suse.com>
- * @author Thomas Müller <thomas.mueller@tmit.eu>
- *
- * @license AGPL-3.0
- *
- * This code is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License, version 3,
- * as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program. If not, see <http://www.gnu.org/licenses/>
- *
+ * SPDX-FileCopyrightText: 2017-2024 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-FileCopyrightText: 2016 ownCloud, Inc.
+ * SPDX-License-Identifier: AGPL-3.0-only
  */
+
 namespace OCA\Encryption\Crypto;
 
 use OC\Encryption\Exceptions\DecryptionFailedException;
@@ -41,7 +17,7 @@ use OCP\Encryption\Exceptions\GenericEncryptionException;
 use OCP\IConfig;
 use OCP\IL10N;
 use OCP\IUserSession;
-use phpseclib\Crypt\RC4;
+use phpseclib3\Crypt\RC4;
 use Psr\Log\LoggerInterface;
 
 /**
@@ -108,7 +84,7 @@ class Crypt {
 	/**
 	 * create new private/public key-pair for user
 	 *
-	 * @return array|bool
+	 * @return array{publicKey: string, privateKey: string}|false
 	 */
 	public function createKeyPair() {
 		$res = $this->getOpenSSLPKey();
@@ -165,7 +141,14 @@ class Crypt {
 	/**
 	 * @throws EncryptionFailedException
 	 */
-	public function symmetricEncryptFileContent(string $plainContent, string $passPhrase, int $version, string $position): string|false {
+	public function symmetricEncryptFileContent(
+		#[\SensitiveParameter]
+		string $plainContent,
+		#[\SensitiveParameter]
+		string $passPhrase,
+		int $version,
+		string $position,
+	): string|false {
 		if (!$plainContent) {
 			$this->logger->error('Encryption Library, symmetrical encryption failed no content given',
 				['app' => 'encryption']);
@@ -180,7 +163,7 @@ class Crypt {
 			$this->getCipher());
 
 		// Create a signature based on the key as well as the current version
-		$sig = $this->createSignature($encryptedContent, $passPhrase.'_'.$version.'_'.$position);
+		$sig = $this->createSignature($encryptedContent, $passPhrase . '_' . $version . '_' . $position);
 
 		// combine content to encrypt the IV identifier and actual IV
 		$catFile = $this->concatIV($encryptedContent, $iv);
@@ -216,7 +199,15 @@ class Crypt {
 	/**
 	 * @throws EncryptionFailedException
 	 */
-	private function encrypt(string $plainContent, string $iv, string $passPhrase = '', string $cipher = self::DEFAULT_CIPHER): string {
+	private function encrypt(
+		#[\SensitiveParameter]
+		string $plainContent,
+		#[\SensitiveParameter]
+		string $iv,
+		#[\SensitiveParameter]
+		string $passPhrase = '',
+		string $cipher = self::DEFAULT_CIPHER,
+	): string {
 		$options = $this->useLegacyBase64Encoding ? 0 : OPENSSL_RAW_DATA;
 		$encryptedContent = openssl_encrypt($plainContent,
 			$cipher,
@@ -326,7 +317,14 @@ class Crypt {
 	 *
 	 * @param string $uid only used for user keys
 	 */
-	protected function generatePasswordHash(string $password, string $cipher, string $uid = '', int $iterations = 600000): string {
+	protected function generatePasswordHash(
+		#[\SensitiveParameter]
+		string $password,
+		#[\SensitiveParameter]
+		string $cipher,
+		string $uid = '',
+		int $iterations = 600000,
+	): string {
 		$instanceId = $this->config->getSystemValue('instanceid');
 		$instanceSecret = $this->config->getSystemValue('secret');
 		$salt = hash('sha256', $uid . $instanceId . $instanceSecret, true);
@@ -345,12 +343,15 @@ class Crypt {
 	/**
 	 * encrypt private key
 	 *
-	 * @param string $privateKey
-	 * @param string $password
 	 * @param string $uid for regular users, empty for system keys
-	 * @return false|string
 	 */
-	public function encryptPrivateKey($privateKey, $password, $uid = '') {
+	public function encryptPrivateKey(
+		#[\SensitiveParameter]
+		string $privateKey,
+		#[\SensitiveParameter]
+		string $password,
+		string $uid = '',
+	): string|false {
 		$cipher = $this->getCipher();
 		$hash = $this->generatePasswordHash($password, $cipher, $uid);
 		$encryptedKey = $this->symmetricEncryptFileContent(
@@ -364,12 +365,15 @@ class Crypt {
 	}
 
 	/**
-	 * @param string $privateKey
-	 * @param string $password
 	 * @param string $uid for regular users, empty for system keys
-	 * @return false|string
 	 */
-	public function decryptPrivateKey($privateKey, $password = '', $uid = '') {
+	public function decryptPrivateKey(
+		#[\SensitiveParameter]
+		string $privateKey,
+		#[\SensitiveParameter]
+		string $password = '',
+		string $uid = '',
+	) : string|false {
 		$header = $this->parseHeader($privateKey);
 
 		if (isset($header['cipher'])) {
@@ -417,11 +421,11 @@ class Crypt {
 
 	/**
 	 * check if it is a valid private key
-	 *
-	 * @param string $plainKey
-	 * @return bool
 	 */
-	protected function isValidPrivateKey($plainKey) {
+	protected function isValidPrivateKey(
+		#[\SensitiveParameter]
+		string $plainKey,
+	): bool {
 		$res = openssl_get_privatekey($plainKey);
 		if (is_object($res) && get_class($res) === 'OpenSSLAsymmetricKey') {
 			$sslInfo = openssl_pkey_get_details($res);
@@ -434,17 +438,20 @@ class Crypt {
 	}
 
 	/**
-	 * @param string $keyFileContents
-	 * @param string $passPhrase
-	 * @param string $cipher
-	 * @param int $version
-	 * @param int|string $position
-	 * @param boolean $binaryEncoding
-	 * @return string
 	 * @throws DecryptionFailedException
 	 */
-	public function symmetricDecryptFileContent($keyFileContents, $passPhrase, $cipher = self::DEFAULT_CIPHER, $version = 0, $position = 0, bool $binaryEncoding = false) {
-		if ($keyFileContents == '') {
+	public function symmetricDecryptFileContent(
+		#[\SensitiveParameter]
+		string $keyFileContents,
+		#[\SensitiveParameter]
+		string $passPhrase,
+		#[\SensitiveParameter]
+		string $cipher = self::DEFAULT_CIPHER,
+		int $version = 0,
+		int|string $position = 0,
+		bool $binaryEncoding = false,
+	): string {
+		if ($keyFileContents === '') {
 			return '';
 		}
 
@@ -472,7 +479,14 @@ class Crypt {
 	 *
 	 * @throws GenericEncryptionException
 	 */
-	private function checkSignature(string $data, string $passPhrase, string $expectedSignature): void {
+	private function checkSignature(
+		#[\SensitiveParameter]
+		string $data,
+		#[\SensitiveParameter]
+		string $passPhrase,
+		#[\SensitiveParameter]
+		string $expectedSignature,
+	): void {
 		$enforceSignature = !$this->config->getSystemValueBool('encryption_skip_signature_check', false);
 
 		$signature = $this->createSignature($data, $passPhrase);
@@ -482,7 +496,7 @@ class Crypt {
 			if ($enforceSignature) {
 				throw new GenericEncryptionException('Bad Signature', $this->l->t('Bad Signature'));
 			} else {
-				$this->logger->info("Signature check skipped", ['app' => 'encryption']);
+				$this->logger->info('Signature check skipped', ['app' => 'encryption']);
 			}
 		}
 	}
@@ -490,11 +504,15 @@ class Crypt {
 	/**
 	 * create signature
 	 */
-	private function createSignature(string $data, string $passPhrase): string {
+	private function createSignature(
+		#[\SensitiveParameter]
+		string $data,
+		#[\SensitiveParameter]
+		string $passPhrase,
+	): string {
 		$passPhrase = hash('sha512', $passPhrase . 'a', true);
 		return hash_hmac('sha256', $data, $passPhrase);
 	}
-
 
 	/**
 	 * @param bool $hasSignature did the block contain a signature, in this case we use a different padding
@@ -559,11 +577,20 @@ class Crypt {
 		return ($signaturePosition !== false);
 	}
 
-
 	/**
 	 * @throws DecryptionFailedException
 	 */
-	private function decrypt(string $encryptedContent, string $iv, string $passPhrase = '', string $cipher = self::DEFAULT_CIPHER, bool $binaryEncoding = false): string {
+	private function decrypt(
+		#[\SensitiveParameter]
+		string $encryptedContent,
+		#[\SensitiveParameter]
+		string $iv,
+		#[\SensitiveParameter]
+		string $passPhrase = '',
+		#[\SensitiveParameter]
+		string $cipher = self::DEFAULT_CIPHER,
+		bool $binaryEncoding = false,
+	): string {
 		$options = $binaryEncoding === true ? OPENSSL_RAW_DATA : 0;
 		$plainContent = openssl_decrypt($encryptedContent,
 			$cipher,
@@ -571,7 +598,7 @@ class Crypt {
 			$options,
 			$iv);
 
-		if ($plainContent) {
+		if ($plainContent !== false) {
 			return $plainContent;
 		} else {
 			throw new DecryptionFailedException('Encryption library: Decryption (symmetric) of content failed: ' . openssl_error_string());
@@ -628,7 +655,12 @@ class Crypt {
 	 * @param \OpenSSLAsymmetricKey|\OpenSSLCertificate|array|string $privateKey
 	 * @throws MultiKeyDecryptException
 	 */
-	public function multiKeyDecrypt(string $shareKey, $privateKey): string {
+	public function multiKeyDecrypt(
+		#[\SensitiveParameter]
+		string $shareKey,
+		#[\SensitiveParameter]
+		$privateKey,
+	): string {
 		$plainContent = '';
 
 		// decrypt the intermediate key with RSA
@@ -660,7 +692,12 @@ class Crypt {
 	 * @param array<string,\OpenSSLAsymmetricKey|\OpenSSLCertificate|array|string> $keyFiles
 	 * @throws MultiKeyEncryptException
 	 */
-	public function multiKeyEncrypt(string $plainContent, array $keyFiles): array {
+	public function multiKeyEncrypt(
+		#[\SensitiveParameter]
+		string $plainContent,
+		#[\SensitiveParameter]
+		array $keyFiles,
+	): array {
 		if (empty($plainContent)) {
 			throw new MultiKeyEncryptException('Cannot multikeyencrypt empty plain content');
 		}
@@ -749,7 +786,6 @@ class Crypt {
 	 */
 	private function rc4Decrypt(string $data, string $secret): string {
 		$rc4 = new RC4();
-		/** @psalm-suppress InternalMethod */
 		$rc4->setKey($secret);
 
 		return $rc4->decrypt($data);
@@ -760,7 +796,6 @@ class Crypt {
 	 */
 	private function rc4Encrypt(string $data, string $secret): string {
 		$rc4 = new RC4();
-		/** @psalm-suppress InternalMethod */
 		$rc4->setKey($secret);
 
 		return $rc4->encrypt($data);
@@ -776,7 +811,7 @@ class Crypt {
 		$result = false;
 
 		// check if RC4 is used
-		if (strcasecmp($cipher_algo, "rc4") === 0) {
+		if (strcasecmp($cipher_algo, 'rc4') === 0) {
 			// decrypt the intermediate key with RSA
 			if (openssl_private_decrypt($encrypted_key, $intermediate, $private_key, OPENSSL_PKCS1_PADDING)) {
 				// decrypt the file key with the intermediate key
@@ -785,7 +820,7 @@ class Crypt {
 				$result = (strlen($output) === strlen($data));
 			}
 		} else {
-			throw new DecryptionFailedException('Unsupported cipher '.$cipher_algo);
+			throw new DecryptionFailedException('Unsupported cipher ' . $cipher_algo);
 		}
 
 		return $result;
@@ -801,7 +836,7 @@ class Crypt {
 		$result = false;
 
 		// check if RC4 is used
-		if (strcasecmp($cipher_algo, "rc4") === 0) {
+		if (strcasecmp($cipher_algo, 'rc4') === 0) {
 			// make sure that there is at least one public key to use
 			if (count($public_key) >= 1) {
 				// generate the intermediate key
@@ -832,7 +867,7 @@ class Crypt {
 				}
 			}
 		} else {
-			throw new EncryptionFailedException('Unsupported cipher '.$cipher_algo);
+			throw new EncryptionFailedException('Unsupported cipher ' . $cipher_algo);
 		}
 
 		return $result;

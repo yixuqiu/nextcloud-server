@@ -2,27 +2,17 @@
 
 declare(strict_types=1);
 /**
- * @copyright Copyright (c) 2021 Robin Appelman <robin@icewind.nl>
- *
- * @license GNU AGPL version 3 or any later version
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
- *
+ * SPDX-FileCopyrightText: 2021 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
 namespace OCA\DAV\Connector\Sabre;
 
+use OCA\DAV\Connector\Sabre\Exception\Forbidden as DAVForbiddenException;
+use OCP\AppFramework\Http;
+use OCP\Files\ForbiddenException;
+use Sabre\DAV\Exception;
+use Sabre\DAV\Exception\BadRequest;
 use Sabre\DAV\Server;
 use Sabre\DAV\ServerPlugin;
 use Sabre\HTTP\RequestInterface;
@@ -31,53 +21,71 @@ use Sabre\HTTP\ResponseInterface;
 class ChecksumUpdatePlugin extends ServerPlugin {
 	protected ?Server $server = null;
 
+	#[\Override]
 	public function initialize(Server $server) {
 		$this->server = $server;
 		$server->on('method:PATCH', [$this, 'httpPatch']);
 	}
 
+	#[\Override]
 	public function getPluginName(): string {
 		return 'checksumupdate';
 	}
 
 	/** @return string[] */
-	public function getHTTPMethods($path): array {
-		$tree = $this->server->tree;
-
-		if ($tree->nodeExists($path)) {
-			$node = $tree->getNodeForPath($path);
-			if ($node instanceof File) {
-				return ['PATCH'];
-			}
-		}
-
-		return [];
-	}
-
-	/** @return string[] */
+	#[\Override]
 	public function getFeatures(): array {
 		return ['nextcloud-checksum-update'];
 	}
 
+	/**
+	 * @throws BadRequest if the requested hash algorithm is not supported
+	 * @throws DAVForbiddenException if the user may not read and update the node
+	 * @throws Exception if the checksum could not be calculated
+	 */
 	public function httpPatch(RequestInterface $request, ResponseInterface $response) {
 		$path = $request->getPath();
 
 		$node = $this->server->tree->getNodeForPath($path);
-		if ($node instanceof File) {
-			$type = strtolower(
-				(string)$request->getHeader('X-Recalculate-Hash')
-			);
+		if (!$node instanceof File) {
+			return;
+		}
 
+		$type = strtolower(
+			(string)$request->getHeader('X-Recalculate-Hash')
+		);
+
+		// Without the header this is not a checksum update, leave the request to other plugins
+		if ($type === '') {
+			return;
+		}
+
+		if (!in_array($type, hash_algos(), true)) {
+			throw new BadRequest('Unsupported hash algorithm "' . $type . '"');
+		}
+
+		// Recalculating reads the whole file content and persists the result,
+		// so it requires both read and write access to the node.
+		$info = $node->getFileInfo();
+		if (!$info->isReadable() || !$info->isUpdateable()) {
+			throw new DAVForbiddenException('You are not allowed to recalculate the checksum of this file', false);
+		}
+
+		try {
 			$hash = $node->hash($type);
-			if ($hash) {
-				$checksum = strtoupper($type) . ':' . $hash;
-				$node->setChecksum($checksum);
-				$response->addHeader('OC-Checksum', $checksum);
-				$response->setHeader('Content-Length', '0');
-				$response->setStatus(204);
-
-				return false;
+			if ($hash === false) {
+				throw new Exception('Could not calculate the ' . $type . ' checksum of "' . $path . '"');
 			}
+
+			$checksum = strtoupper($type) . ':' . $hash;
+			$node->setChecksum($checksum);
+
+			$response->addHeader('OC-Checksum', $checksum);
+			$response->setHeader('Content-Length', '0');
+			$response->setStatus(Http::STATUS_NO_CONTENT);
+			return false;
+		} catch (ForbiddenException $e) {
+			throw new DAVForbiddenException($e->getMessage(), $e->getRetry(), $e);
 		}
 	}
 }

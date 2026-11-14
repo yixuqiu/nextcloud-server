@@ -2,25 +2,8 @@
 
 declare(strict_types=1);
 /**
- * @copyright Copyright (c) 2024 Ferdinand Thiessen <opensource@fthiessen.de>
- *
- * @author Ferdinand Thiessen <opensource@fthiessen.de>
- *
- * @license AGPL-3.0-or-later
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
- *
+ * SPDX-FileCopyrightText: 2024 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
 namespace OCA\UpdateNotification\BackgroundJob;
@@ -55,6 +38,7 @@ class AppUpdatedNotifications extends QueuedJob {
 	/**
 	 * @param array{appId: string, timestamp: int} $argument
 	 */
+	#[\Override]
 	protected function run(mixed $argument): void {
 		$appId = $argument['appId'];
 		$timestamp = $argument['timestamp'];
@@ -64,7 +48,7 @@ class AppUpdatedNotifications extends QueuedJob {
 		$this->logger->debug(
 			'Running background job to create app update notifications for "' . $appId . '"',
 			[
-				'app' => Application::APP_NAME,
+				'app' => Application::APP_ID,
 			],
 		);
 
@@ -77,7 +61,7 @@ class AppUpdatedNotifications extends QueuedJob {
 
 		// Create new notifications
 		$notification = $this->notificationManager->createNotification();
-		$notification->setApp(Application::APP_NAME)
+		$notification->setApp(Application::APP_ID)
 			->setDateTime($dateTime)
 			->setSubject('app_updated', [$appId])
 			->setObject('app_updated', $appId);
@@ -91,7 +75,7 @@ class AppUpdatedNotifications extends QueuedJob {
 	 */
 	private function stopPreviousNotifications(string $appId): void {
 		$notification = $this->notificationManager->createNotification();
-		$notification->setApp(Application::APP_NAME)
+		$notification->setApp(Application::APP_ID)
 			->setObject('app_updated', $appId);
 		$this->notificationManager->markProcessed($notification);
 	}
@@ -105,7 +89,7 @@ class AppUpdatedNotifications extends QueuedJob {
 		$isDefer = $this->notificationManager->defer();
 
 		// Notify all seen users about the app update
-		$this->userManager->callForSeenUsers(function (IUser $user) use ($guestsEnabled, $appId, $notification) {
+		$this->userManager->callForSeenUsers(function (IUser $user) use ($guestsEnabled, $appId, $notification): void {
 			if (!$guestsEnabled && ($user->getBackendClassName() === '\OCA\Guests\UserBackend')) {
 				return;
 			}

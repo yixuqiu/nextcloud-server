@@ -1,37 +1,16 @@
 <?php
+
 /**
- * @copyright Copyright (c) 2016, ownCloud, Inc.
- *
- * @author Arthur Schiwon <blizzz@arthur-schiwon.de>
- * @author Bart Visscher <bartv@thisnet.nl>
- * @author Christopher Schäpers <kondou@ts.unde.re>
- * @author Christoph Wurst <christoph@winzerhof-wurst.at>
- * @author Joas Schilling <coding@schilljs.com>
- * @author Jörn Friedrich Dreyer <jfd@butonic.de>
- * @author Morris Jobke <hey@morrisjobke.de>
- * @author Robin Appelman <robin@icewind.nl>
- * @author Roeland Jago Douma <roeland@famdouma.nl>
- * @author Stefan Weil <sw@weilnetz.de>
- * @author Thomas Müller <thomas.mueller@tmit.eu>
- *
- * @license AGPL-3.0
- *
- * This code is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License, version 3,
- * as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program. If not, see <http://www.gnu.org/licenses/>
- *
+ * SPDX-FileCopyrightText: 2016-2024 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-FileCopyrightText: 2016 ownCloud, Inc.
+ * SPDX-License-Identifier: AGPL-3.0-only
  */
+
 namespace OC\Archive;
 
 use Icewind\Streams\CallbackWrapper;
+use OCP\ITempManager;
+use OCP\Server;
 use Psr\Log\LoggerInterface;
 
 class ZIP extends Archive {
@@ -40,17 +19,13 @@ class ZIP extends Archive {
 	 */
 	private $zip;
 
-	/**
-	 * @var string
-	 */
-	private $path;
-
-	public function __construct(string $source) {
-		$this->path = $source;
+	public function __construct(
+		private string $path,
+	) {
 		$this->zip = new \ZipArchive();
-		if ($this->zip->open($source, \ZipArchive::CREATE)) {
+		if ($this->zip->open($this->path, \ZipArchive::CREATE)) {
 		} else {
-			\OC::$server->get(LoggerInterface::class)->warning('Error while opening archive '.$source, ['app' => 'files_archive']);
+			Server::get(LoggerInterface::class)->warning('Error while opening archive ' . $this->path, ['app' => 'files_archive']);
 		}
 	}
 
@@ -59,6 +34,7 @@ class ZIP extends Archive {
 	 * @param string $path
 	 * @return bool
 	 */
+	#[\Override]
 	public function addFolder(string $path): bool {
 		return $this->zip->addEmptyDir($path);
 	}
@@ -67,8 +43,9 @@ class ZIP extends Archive {
 	 * add a file to the archive
 	 * @param string $source either a local file or string data
 	 */
+	#[\Override]
 	public function addFile(string $path, string $source = ''): bool {
-		if ($source and $source[0] == '/' and file_exists($source)) {
+		if ($source && $source[0] === '/' && file_exists($source)) {
 			$result = $this->zip->addFile($source, $path);
 		} else {
 			$result = $this->zip->addFromString($path, $source);
@@ -83,6 +60,7 @@ class ZIP extends Archive {
 	/**
 	 * rename a file or folder in the archive
 	 */
+	#[\Override]
 	public function rename(string $source, string $dest): bool {
 		$source = $this->stripPath($source);
 		$dest = $this->stripPath($dest);
@@ -92,6 +70,7 @@ class ZIP extends Archive {
 	/**
 	 * get the uncompressed size of a file in the archive
 	 */
+	#[\Override]
 	public function filesize(string $path): false|int|float {
 		$stat = $this->zip->statName($path);
 		return $stat['size'] ?? false;
@@ -101,6 +80,7 @@ class ZIP extends Archive {
 	 * get the last modified time of a file in the archive
 	 * @return int|false
 	 */
+	#[\Override]
 	public function mtime(string $path) {
 		return filemtime($this->path);
 	}
@@ -108,6 +88,7 @@ class ZIP extends Archive {
 	/**
 	 * get the files in a folder
 	 */
+	#[\Override]
 	public function getFolder(string $path): array {
 		// FIXME: multiple calls on getFolder would traverse
 		// the whole file list over and over again
@@ -116,7 +97,7 @@ class ZIP extends Archive {
 		$folderContent = [];
 		$pathLength = strlen($path);
 		foreach ($files as $file) {
-			if (substr($file, 0, $pathLength) == $path and $file != $path) {
+			if (substr($file, 0, $pathLength) === $path && $file !== $path) {
 				if (strrpos(substr($file, 0, -1), '/') <= $pathLength) {
 					$folderContent[] = substr($file, $pathLength);
 				}
@@ -154,6 +135,7 @@ class ZIP extends Archive {
 	/**
 	 * get all files in the archive
 	 */
+	#[\Override]
 	public function getFiles(): array {
 		$fileCount = $this->zip->numFiles;
 		$files = [];
@@ -167,6 +149,7 @@ class ZIP extends Archive {
 	 * get the content of a file
 	 * @return string|false
 	 */
+	#[\Override]
 	public function getFile(string $path) {
 		return $this->zip->getFromName($path);
 	}
@@ -174,6 +157,7 @@ class ZIP extends Archive {
 	/**
 	 * extract a single file from the archive
 	 */
+	#[\Override]
 	public function extractFile(string $path, string $dest): bool {
 		$fp = $this->zip->getStream($path);
 		if ($fp === false) {
@@ -185,6 +169,7 @@ class ZIP extends Archive {
 	/**
 	 * extract the archive
 	 */
+	#[\Override]
 	public function extract(string $dest): bool {
 		return $this->zip->extractTo($dest);
 	}
@@ -192,16 +177,18 @@ class ZIP extends Archive {
 	/**
 	 * check if a file or folder exists in the archive
 	 */
+	#[\Override]
 	public function fileExists(string $path): bool {
-		return ($this->zip->locateName($path) !== false) or ($this->zip->locateName($path.'/') !== false);
+		return ($this->zip->locateName($path) !== false) || ($this->zip->locateName($path . '/') !== false);
 	}
 
 	/**
 	 * remove a file or folder from the archive
 	 */
+	#[\Override]
 	public function remove(string $path): bool {
-		if ($this->fileExists($path.'/')) {
-			return $this->zip->deleteName($path.'/');
+		if ($this->fileExists($path . '/')) {
+			return $this->zip->deleteName($path . '/');
 		} else {
 			return $this->zip->deleteName($path);
 		}
@@ -211,8 +198,9 @@ class ZIP extends Archive {
 	 * get a file handler
 	 * @return bool|resource
 	 */
+	#[\Override]
 	public function getStream(string $path, string $mode) {
-		if ($mode == 'r' or $mode == 'rb') {
+		if ($mode === 'r' || $mode === 'rb') {
 			return $this->zip->getStream($path);
 		} else {
 			//since we can't directly get a writable stream,
@@ -224,12 +212,12 @@ class ZIP extends Archive {
 			} else {
 				$ext = '';
 			}
-			$tmpFile = \OC::$server->getTempManager()->getTemporaryFile($ext);
+			$tmpFile = Server::get(ITempManager::class)->getTemporaryFile($ext);
 			if ($this->fileExists($path)) {
 				$this->extractFile($path, $tmpFile);
 			}
 			$handle = fopen($tmpFile, $mode);
-			return CallbackWrapper::wrap($handle, null, null, function () use ($path, $tmpFile) {
+			return CallbackWrapper::wrap($handle, null, null, function () use ($path, $tmpFile): void {
 				$this->writeBack($tmpFile, $path);
 			});
 		}
@@ -244,7 +232,7 @@ class ZIP extends Archive {
 	}
 
 	private function stripPath(string $path): string {
-		if (!$path || $path[0] == '/') {
+		if (!$path || $path[0] === '/') {
 			return substr($path, 1);
 		} else {
 			return $path;

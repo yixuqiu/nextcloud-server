@@ -1,25 +1,10 @@
 <?php
+
 /**
- * @copyright Copyright (c) 2022 John Molakvoæ <skjnldsv@protonmail.com>
- *
- * @author John Molakvoæ <skjnldsv@protonmail.com>
- *
- * @license GNU AGPL version 3 or any later version
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
- *
+ * SPDX-FileCopyrightText: 2022 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
+
 namespace OCA\Theming\Service;
 
 use OCA\Theming\AppInfo\Application;
@@ -30,27 +15,28 @@ use OCA\Theming\Themes\DefaultTheme;
 use OCA\Theming\Themes\DyslexiaFont;
 use OCA\Theming\Themes\HighContrastTheme;
 use OCA\Theming\Themes\LightTheme;
+use OCA\Theming\Themes\ReducedMotion;
 use OCP\IConfig;
 use OCP\IUser;
 use OCP\IUserSession;
+use Psr\Log\LoggerInterface;
 
 class ThemesService {
-	private IUserSession $userSession;
-	private IConfig $config;
-
 	/** @var ITheme[] */
 	private array $themesProviders;
 
-	public function __construct(IUserSession $userSession,
-		IConfig $config,
-		DefaultTheme $defaultTheme,
+	public function __construct(
+		private IUserSession $userSession,
+		private IConfig $config,
+		private LoggerInterface $logger,
+		private DefaultTheme $defaultTheme,
 		LightTheme $lightTheme,
-		DarkTheme $darkTheme,
+		private DarkTheme $darkTheme,
 		HighContrastTheme $highContrastTheme,
 		DarkHighContrastTheme $darkHighContrastTheme,
-		DyslexiaFont $dyslexiaFont) {
-		$this->userSession = $userSession;
-		$this->config = $config;
+		DyslexiaFont $dyslexiaFont,
+		ReducedMotion $motionSickness,
+	) {
 
 		// Register themes
 		$this->themesProviders = [
@@ -60,6 +46,7 @@ class ThemesService {
 			$highContrastTheme->getId() => $highContrastTheme,
 			$darkHighContrastTheme->getId() => $darkHighContrastTheme,
 			$dyslexiaFont->getId() => $dyslexiaFont,
+			$motionSickness->getId() => $motionSickness,
 		];
 	}
 
@@ -69,6 +56,28 @@ class ThemesService {
 	 * @return ITheme[]
 	 */
 	public function getThemes(): array {
+		// Enforced theme if configured
+		$enforcedTheme = $this->config->getSystemValueString('enforce_theme', '');
+		if ($enforcedTheme !== '') {
+			if (!isset($this->themesProviders[$enforcedTheme])) {
+				$this->logger->error('Enforced theme not found', ['theme' => $enforcedTheme]);
+				return $this->themesProviders;
+			}
+
+			$defaultTheme = $this->themesProviders[$this->defaultTheme->getId()];
+			$darkTheme = $this->themesProviders[$this->darkTheme->getId()];
+			$theme = $this->themesProviders[$enforcedTheme];
+			return [
+				// Leave the default theme as a fallback
+				$defaultTheme->getId() => $defaultTheme,
+				// Make sure we also have the dark theme to allow apps
+				// to scope sections of their UI to the dark theme
+				$darkTheme->getId() => $darkTheme,
+				// Finally, the enforced theme
+				$theme->getId() => $theme,
+			];
+		}
+
 		return $this->themesProviders;
 	}
 
@@ -79,33 +88,22 @@ class ThemesService {
 	 * @return string[] the enabled themes
 	 */
 	public function enableTheme(ITheme $theme): array {
-		$themesIds = $this->getEnabledThemes();
+		$enabledThemeIds = $this->getEnabledThemes();
 
 		// If already enabled, ignore
-		if (in_array($theme->getId(), $themesIds)) {
-			return $themesIds;
+		if (in_array($theme->getId(), $enabledThemeIds, true)) {
+			return $enabledThemeIds;
 		}
 
-		/** @var ITheme[] */
-		$themes = array_filter(array_map(function ($themeId) {
-			return $this->getThemes()[$themeId];
-		}, $themesIds));
+		// for other types then supplementary themes we need to filter out themes with the same type
+		if ($theme->getType() !== ITheme::TYPE_SUPPLEMENTARY) {
+			$allThemes = $this->getThemes();
+			$enabledThemeIds = array_filter($enabledThemeIds, fn (string $themeId) => $allThemes[$themeId]->gettype() !== $theme->gettype());
+		}
 
-		// Filtering all themes with the same type
-		$filteredThemes = array_filter($themes, function (ITheme $t) use ($theme) {
-			return $theme->getType() === $t->getType();
-		});
-
-		// Retrieve IDs only
-		/** @var string[] */
-		$filteredThemesIds = array_map(function (ITheme $t) {
-			return $t->getId();
-		}, array_values($filteredThemes));
-
-		$enabledThemes = array_merge(array_diff($themesIds, $filteredThemesIds), [$theme->getId()]);
-		$this->setEnabledThemes($enabledThemes);
-
-		return $enabledThemes;
+		$enabledThemeIds[] = $theme->getId();
+		$this->setEnabledThemes($enabledThemeIds);
+		return array_values($enabledThemeIds);
 	}
 
 	/**
@@ -118,12 +116,12 @@ class ThemesService {
 		$themesIds = $this->getEnabledThemes();
 
 		// If enabled, removing it
-		if (in_array($theme->getId(), $themesIds)) {
-			$enabledThemes = array_diff($themesIds, [$theme->getId()]);
+		if (in_array($theme->getId(), $themesIds, true)) {
+			$enabledThemes = array_values(array_diff($themesIds, [$theme->getId()]));
 			$this->setEnabledThemes($enabledThemes);
 			return $enabledThemes;
 		}
-		
+
 		return $themesIds;
 	}
 
@@ -138,25 +136,28 @@ class ThemesService {
 		if ($user instanceof IUser) {
 			// Using keys as it's faster
 			$themes = $this->getEnabledThemes();
-			return in_array($theme->getId(), $themes);
+			return in_array($theme->getId(), $themes, true);
 		}
 		return false;
 	}
 
 	/**
-	 * Get the list of all enabled themes IDs
-	 * for the logged-in user
+	 * Get the list of all enabled themes IDs for the current user.
 	 *
-	 * @return string[]
+	 * @return list<string>
 	 */
-	public function getEnabledThemes(): array {
+	public function getEnabledThemes() {
+		$enforcedTheme = $this->config->getSystemValueString('enforce_theme', '');
 		$user = $this->userSession->getUser();
 		if ($user === null) {
+			if ($enforcedTheme !== '') {
+				return [$enforcedTheme];
+			}
 			return [];
 		}
 
-		$enforcedTheme = $this->config->getSystemValueString('enforce_theme', '');
-		$enabledThemes = json_decode($this->config->getUserValue($user->getUID(), Application::APP_ID, 'enabled-themes', '[]'));
+		/** @var list<string> */
+		$enabledThemes = json_decode($this->config->getUserValue($user->getUID(), Application::APP_ID, 'enabled-themes', '["default"]'));
 		if ($enforcedTheme !== '') {
 			return array_merge([$enforcedTheme], $enabledThemes);
 		}
